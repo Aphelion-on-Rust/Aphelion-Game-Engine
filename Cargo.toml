@@ -1,0 +1,24 @@
+# Flux Aphelion - workspace root.
+# One workspace, one crate per big area, so each area can be read and changed on its own.
+
+[workspace]
+resolver = "2"
+members = ["core", "engine", "editor", "launcher", "scripting", "grp", "extensions"]
+
+[workspace.package]
+version = "0.8.0"
+edition = "2021"
+authors = ["atropinex"]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+uuid = { version = "1", features = ["v4", "serde"] }
+# Window + drawing for the editor (step 4b). Pinned to 0.29, newer versions changed the API.
+eframe = "0.29"
+# Launcher only (step 7):
+# GitHub's release list is JSON, parsed in launcher/src/releases/parse.rs and nowhere else.
+serde_json = "1"
+ureq = "2"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+sha2 = "0.10"

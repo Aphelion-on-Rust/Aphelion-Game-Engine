@@ -1,0 +1,14 @@
+[package]
+name = "flux-launcher"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+flux-core = { path = "../core" }
+serde.workspace = true
+serde_json.workspace = true
+eframe.workspace = true
+ureq.workspace = true
+zip.workspace = true
+sha2.workspace = true

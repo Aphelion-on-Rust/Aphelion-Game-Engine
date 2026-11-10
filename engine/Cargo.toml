@@ -1,0 +1,9 @@
+[package]
+name = "flux-engine"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+flux-core = { path = "../core" }
+serde.workspace = true
+uuid.workspace = true

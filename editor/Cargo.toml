@@ -1,0 +1,12 @@
+[package]
+name = "flux-editor"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+flux-core = { path = "../core" }
+flux-engine = { path = "../engine" }
+serde.workspace = true
+serde_yaml.workspace = true
+eframe.workspace = true
