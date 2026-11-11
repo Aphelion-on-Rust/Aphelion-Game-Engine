@@ -51,6 +51,15 @@ impl HierarchyController {
         }
     }
 
+    /// Forgets selected / opened objects that no longer exist (after an undo, for example).
+    pub fn prune_missing(&self, ui: &mut HierarchyUiModel, scene: &SceneModel) {
+        let objects = &scene.data().objects;
+        let data = self.write(ui);
+
+        data.selected.retain(|uuid| query::find_object(objects, uuid).is_some());
+        data.expanded.retain(|uuid| query::find_object(objects, uuid).is_some());
+    }
+
     /// Makes a new object, selects it, and opens its parent so it can be seen.
     pub fn create_object(
         &self,

@@ -11,9 +11,9 @@ pub struct AssetInfo {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ReleaseInfo {
-    /// The git tag, for example "v0.7.0".
+    /// The git tag, for example "v1.0.0".
     pub tag: String,
-    /// The version without the "v", for example "0.7.0". Used as the install folder name.
+    /// The version without the "v", for example "1.0.0". Used as the install folder name.
     pub version: String,
     pub name: String,
     pub prerelease: bool,

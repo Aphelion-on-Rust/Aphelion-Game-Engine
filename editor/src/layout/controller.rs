@@ -109,10 +109,10 @@ mod tests {
     }
 
     #[test]
-    fn default_layout_has_the_six_main_panels() {
+    fn default_layout_has_the_seven_main_panels() {
         let model = LayoutModel::default();
 
-        assert_eq!(query::all_panels(model.data()).len(), 6);
+        assert_eq!(query::all_panels(model.data()).len(), 7);
         assert_no_duplicates(&model);
     }
 
@@ -123,7 +123,7 @@ mod tests {
         LayoutController.move_panel(&mut model, PanelKind::Inspector, PanelKind::Hierarchy, DropZone::Center).unwrap();
 
         assert_no_duplicates(&model);
-        assert_eq!(query::all_panels(model.data()).len(), 6);
+        assert_eq!(query::all_panels(model.data()).len(), 7);
 
         // Inspector's old group is gone, so the first group now holds both.
         match &model.data().root {
@@ -149,7 +149,14 @@ mod tests {
     fn the_last_panel_cannot_be_closed() {
         let mut model = LayoutModel::default();
 
-        for panel in [PanelKind::Hierarchy, PanelKind::Scene, PanelKind::Game, PanelKind::Inspector, PanelKind::Project] {
+        for panel in [
+            PanelKind::Hierarchy,
+            PanelKind::Scene,
+            PanelKind::Game,
+            PanelKind::Inspector,
+            PanelKind::Project,
+            PanelKind::History,
+        ] {
             LayoutController.close_panel(&mut model, panel).unwrap();
         }
 

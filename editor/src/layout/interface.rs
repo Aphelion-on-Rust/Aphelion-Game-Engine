@@ -13,6 +13,7 @@ pub enum PanelKind {
     Timeline,
     Terrain,
     Profiler,
+    History,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -69,8 +70,8 @@ pub struct LayoutData {
 /// The first layout a new user sees:
 ///
 /// ```text
-/// | Hierarchy | Scene / Game       | Inspector |
-/// |           | Project / Console  |           |
+/// | Hierarchy | Scene / Game                | Inspector |
+/// |           | Project / Console / History |           |
 /// ```
 impl Default for LayoutData {
     fn default() -> Self {
@@ -78,7 +79,7 @@ impl Default for LayoutData {
             Axis::Vertical,
             0.7,
             DockNode::tabs(vec![PanelKind::Scene, PanelKind::Game]),
-            DockNode::tabs(vec![PanelKind::Project, PanelKind::Console]),
+            DockNode::tabs(vec![PanelKind::Project, PanelKind::Console, PanelKind::History]),
         );
         let center_and_inspector = DockNode::split(
             Axis::Horizontal,

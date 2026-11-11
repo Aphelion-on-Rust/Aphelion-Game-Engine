@@ -4,6 +4,7 @@
 use super::field::{write_field, ComponentField, NumberTarget};
 use super::models::EditorModels;
 use crate::hierarchy::HierarchyController;
+use crate::history::HistoryController;
 use crate::keybinds::actions;
 use crate::layout::{DropZone, LayoutController, PanelKind};
 use crate::number_field::{DragPhase, DragSpeed, NumberFieldConfig, NumberFieldController};
@@ -26,6 +27,13 @@ pub enum UiCommand {
     SetTheme(String),
     // project
     SaveScene,
+    // history
+    Undo,
+    Redo,
+    /// Go back this many steps (a click in the history panel).
+    UndoSteps(usize),
+    /// Go forward this many steps.
+    RedoSteps(usize),
     // hierarchy
     SelectObject { object: AssetUuid, additive: bool },
     ToggleExpanded(AssetUuid),
@@ -42,6 +50,22 @@ pub enum UiCommand {
     NumberDragMove { delta_x: f64, speed: DragSpeed },
     NumberDragEnd,
     NumberDragCancel,
+}
+
+impl UiCommand {
+    /// For commands that edit the scene: the name of the undo step, and a merge key
+    /// (steps with the same key that follow each other become one step).
+    fn history_info(&self) -> Option<(String, Option<String>)> {
+        match self {
+            UiCommand::CreateObject { .. } => Some(("Create object".to_string(), None)),
+            UiCommand::DeleteSelected => Some(("Delete".to_string(), None)),
+            UiCommand::Reparent { .. } => Some(("Move object".to_string(), None)),
+            UiCommand::SetObjectActive { .. } => Some(("Turn object on/off".to_string(), None)),
+            UiCommand::SetScriptEnabled { .. } => Some(("Turn script on/off".to_string(), None)),
+            UiCommand::RenameObject { object, .. } => Some(("Rename".to_string(), Some(format!("rename:{object}")))),
+            _ => None,
+        }
+    }
 }
 
 /// State the controller side needs between frames. Not a model, nothing here is saved.
@@ -74,8 +98,18 @@ impl Default for ControllerState {
 /// Runs the commands in order. An error does not stop the rest, it shows in the status bar.
 pub fn apply_all(commands: Vec<UiCommand>, models: &mut EditorModels, state: &mut ControllerState) {
     for command in commands {
+        // Commands that edit the scene become an undo step, if they really changed something.
+        let edit = command.history_info();
+        let before = edit.as_ref().map(|_| models.scene.data().clone());
+
         if let Err(error) = apply(command, models, state) {
             state.status = error.to_string();
+        }
+
+        if let (Some((label, merge_key)), Some(before)) = (edit, before) {
+            if models.scene.data() != &before {
+                HistoryController.record(&mut models.history, &label, merge_key, before);
+            }
         }
     }
 }
@@ -84,6 +118,8 @@ pub fn apply_all(commands: Vec<UiCommand>, models: &mut EditorModels, state: &mu
 pub fn action_to_command(action: &str, models: &EditorModels) -> Option<UiCommand> {
     match action {
         actions::SAVE => Some(UiCommand::SaveScene),
+        actions::UNDO => Some(UiCommand::Undo),
+        actions::REDO => Some(UiCommand::Redo),
         actions::DELETE => Some(UiCommand::DeleteSelected),
         actions::NEW_OBJECT => Some(UiCommand::CreateObject {
             parent: models.hierarchy_ui.data().selected.first().copied(),
@@ -96,6 +132,50 @@ fn write_to_scene(models: &mut EditorModels, target: NumberTarget, value: f64) -
     SceneController.update_component(&mut models.scene, &target.object, target.component, |data| {
         write_field(data, target.field, value)
     })
+}
+
+enum Direction {
+    Back,
+    Forward,
+}
+
+/// Undo or redo `count` steps. Not while a number is being dragged.
+fn step_history(models: &mut EditorModels, state: &mut ControllerState, direction: Direction, count: usize) {
+    if is_dragging(models) {
+        return;
+    }
+
+    let mut last = None;
+
+    for _ in 0..count {
+        let step = match direction {
+            Direction::Back => HistoryController.undo(&mut models.history, &mut models.scene),
+            Direction::Forward => HistoryController.redo(&mut models.history, &mut models.scene),
+        };
+
+        match step {
+            Some(label) => last = Some(label),
+            None => break,
+        }
+    }
+
+    match last {
+        Some(label) => {
+            let verb = match direction {
+                Direction::Back => "Undid",
+                Direction::Forward => "Redid",
+            };
+
+            state.status = format!("{verb} {label}");
+            HierarchyController.prune_missing(&mut models.hierarchy_ui, &models.scene);
+        }
+        None => {
+            state.status = match direction {
+                Direction::Back => "Nothing to undo".to_string(),
+                Direction::Forward => "Nothing to redo".to_string(),
+            };
+        }
+    }
 }
 
 fn is_dragging(models: &EditorModels) -> bool {
@@ -138,6 +218,12 @@ fn apply(command: UiCommand, models: &mut EditorModels, state: &mut ControllerSt
 
         // ----- project -----
         UiCommand::SaveScene => state.save_requested = true,
+
+        // ----- history -----
+        UiCommand::Undo => step_history(models, state, Direction::Back, 1),
+        UiCommand::Redo => step_history(models, state, Direction::Forward, 1),
+        UiCommand::UndoSteps(count) => step_history(models, state, Direction::Back, count),
+        UiCommand::RedoSteps(count) => step_history(models, state, Direction::Forward, count),
 
         // ----- hierarchy -----
         UiCommand::SelectObject { object, additive } => {
@@ -183,6 +269,8 @@ fn apply(command: UiCommand, models: &mut EditorModels, state: &mut ControllerSt
         UiCommand::NumberHover => NumberFieldController.hover_enter(&mut models.number_field),
         UiCommand::NumberDragBegin { target, value, config } => {
             NumberFieldController.begin_drag(&mut models.number_field, 0.0, value, config)?;
+            // The whole drag becomes one undo step.
+            HistoryController.begin_group(&mut models.history, "Change value", models.scene.data().clone());
             state.active_target = Some(target);
             state.drag_x = 0.0;
         }
@@ -198,6 +286,7 @@ fn apply(command: UiCommand, models: &mut EditorModels, state: &mut ControllerSt
         UiCommand::NumberDragEnd => {
             if is_dragging(models) {
                 NumberFieldController.end_drag(&mut models.number_field)?;
+                HistoryController.commit_group(&mut models.history, models.scene.data());
             }
 
             state.active_target = None;
@@ -208,6 +297,7 @@ fn apply(command: UiCommand, models: &mut EditorModels, state: &mut ControllerSt
                 write_to_scene(models, target, old_value)?;
             }
 
+            HistoryController.cancel_group(&mut models.history);
             state.active_target = None;
         }
     }
@@ -325,5 +415,127 @@ mod tests {
         assert!(matches!(action_to_command(actions::DELETE, &models), Some(UiCommand::DeleteSelected)));
         assert!(matches!(action_to_command(actions::SAVE, &models), Some(UiCommand::SaveScene)));
         assert!(action_to_command(actions::PLAY, &models).is_none());
+    }
+
+    #[test]
+    fn undo_and_redo_bring_a_new_object_back_and_forth() {
+        let mut models = EditorModels::new_demo();
+        let mut state = ControllerState::default();
+        let before = models.scene.data().objects.len();
+
+        apply_all(vec![UiCommand::CreateObject { parent: None }], &mut models, &mut state);
+        assert_eq!(models.scene.data().objects.len(), before + 1);
+
+        apply_all(vec![UiCommand::Undo], &mut models, &mut state);
+        assert_eq!(models.scene.data().objects.len(), before);
+        assert!(state.status.contains("Undid"));
+
+        apply_all(vec![UiCommand::Redo], &mut models, &mut state);
+        assert_eq!(models.scene.data().objects.len(), before + 1);
+    }
+
+    #[test]
+    fn a_whole_number_drag_is_one_undo_step() {
+        let mut models = EditorModels::new_demo();
+        let mut state = ControllerState::default();
+        let target = first_target(&models);
+
+        apply_all(
+            vec![
+                UiCommand::NumberDragBegin { target, value: 0.0, config: NumberFieldConfig::default() },
+                UiCommand::NumberDragMove { delta_x: 30.0, speed: DragSpeed::Normal },
+                UiCommand::NumberDragMove { delta_x: 30.0, speed: DragSpeed::Normal },
+                UiCommand::NumberDragEnd,
+            ],
+            &mut models,
+            &mut state,
+        );
+
+        assert_eq!(models.history.data().undo.len(), 1);
+
+        apply_all(vec![UiCommand::Undo], &mut models, &mut state);
+        assert_eq!(first_transform_x(&models), 0.0);
+    }
+
+    #[test]
+    fn a_cancelled_drag_leaves_no_history() {
+        let mut models = EditorModels::new_demo();
+        let mut state = ControllerState::default();
+        let target = first_target(&models);
+
+        apply_all(
+            vec![
+                UiCommand::NumberDragBegin { target, value: 0.0, config: NumberFieldConfig::default() },
+                UiCommand::NumberDragMove { delta_x: 30.0, speed: DragSpeed::Normal },
+                UiCommand::NumberDragCancel,
+            ],
+            &mut models,
+            &mut state,
+        );
+
+        assert!(models.history.data().undo.is_empty());
+    }
+
+    #[test]
+    fn typing_a_name_is_one_undo_step() {
+        let mut models = EditorModels::new_demo();
+        let mut state = ControllerState::default();
+        let object = models.scene.data().objects[0].uuid;
+        let original = models.scene.data().objects[0].name.clone();
+        let rename = |name: &str| UiCommand::RenameObject { object, name: name.to_string() };
+
+        apply_all(vec![rename("A"), rename("Ab"), rename("Abc")], &mut models, &mut state);
+
+        assert_eq!(models.history.data().undo.len(), 1);
+
+        apply_all(vec![UiCommand::Undo], &mut models, &mut state);
+        assert_eq!(models.scene.data().objects[0].name, original);
+    }
+
+    #[test]
+    fn a_command_that_changes_nothing_is_not_a_step() {
+        let mut models = EditorModels::new_demo();
+        let mut state = ControllerState::default();
+
+        // Nothing is selected, so there is nothing to delete.
+        apply_all(vec![UiCommand::DeleteSelected], &mut models, &mut state);
+
+        assert!(models.history.data().undo.is_empty());
+    }
+
+    #[test]
+    fn undoing_a_creation_drops_a_stale_selection_and_redo_brings_the_object_back() {
+        let mut models = EditorModels::new_demo();
+        let mut state = ControllerState::default();
+        let count = models.scene.data().objects.len();
+
+        apply_all(vec![UiCommand::CreateObject { parent: None }], &mut models, &mut state);
+        let created = models.hierarchy_ui.data().selected[0];
+
+        // Undo the creation: the object (and the selection pointing at it) is gone.
+        apply_all(vec![UiCommand::Undo], &mut models, &mut state);
+        assert_eq!(models.scene.data().objects.len(), count);
+        assert!(!models.hierarchy_ui.data().selected.contains(&created));
+
+        // Redo brings the same object, with the same uuid, back.
+        apply_all(vec![UiCommand::Redo], &mut models, &mut state);
+        assert!(models.scene.data().objects.iter().any(|object| object.uuid == created));
+    }
+
+    #[test]
+    fn clicking_a_history_row_goes_back_several_steps() {
+        let mut models = EditorModels::new_demo();
+        let mut state = ControllerState::default();
+        let count = models.scene.data().objects.len();
+
+        for _ in 0..3 {
+            apply_all(vec![UiCommand::CreateObject { parent: None }], &mut models, &mut state);
+        }
+
+        apply_all(vec![UiCommand::UndoSteps(2)], &mut models, &mut state);
+        assert_eq!(models.scene.data().objects.len(), count + 1);
+
+        apply_all(vec![UiCommand::RedoSteps(2)], &mut models, &mut state);
+        assert_eq!(models.scene.data().objects.len(), count + 3);
     }
 }
