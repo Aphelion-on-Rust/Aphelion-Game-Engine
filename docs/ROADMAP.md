@@ -5,17 +5,18 @@ and a changelog entry (`changelog/`).
 
 ## Done
 
-- [x] 1  Foundation: workspace, MIVC base, ids, YAML storage (0.1.0)
-- [x] 2  Scene core: objects, components, Transform / RectTransform, prefabs (0.2.0)
-- [x] 3  Game loop, time, input state, resource GC (0.3.0)
-- [x] 3b Script lifecycle events (0.4.0)
-- [x] 4a Editor logic: layout, themes, keybinds, number fields, hierarchy (0.5.0)
-- [x] 4b Editor window + drawing (egui) (0.6.0)
-- [x] 4c Shared core crate + Launcher (GitHub download, install, version select) (0.7.0)
+- [x] 1  Foundation: workspace, MIVC base, ids, YAML storage
+- [x] 2  Scene core: objects, components, Transform / RectTransform, prefabs
+- [x] 3  Game loop, time, input state, resource GC
+- [x] 3b Script lifecycle events
+- [x] 4a Editor logic: layout, themes, keybinds, number fields, hierarchy
+- [x] 4b Editor window + drawing (egui)
+- [x] 4c Shared core crate + Launcher (GitHub download, install, version select)
 - [x] 5a Projects: files, creating them in the launcher (SGP/HGP, Aphelion's Control),
-         opening and saving in the editor (0.8.0)
+         opening and saving in the editor
+- [x] 5b Undo / redo history (History panel, Edit menu, Ctrl+Z / Ctrl+Y)
 
-About 8 deliveries and 190 files so far.
+About 9 deliveries and 200 files so far.
 
 ## To do (estimates)
 
@@ -24,7 +25,6 @@ File counts include tests and docs. Treat every number as +/- 40%.
 
 | Step | What                                                                 | Deliveries | New files |
 | ---- | -------------------------------------------------------------------- | ---------- | --------- |
-| 5b   | Undo / redo history                                                  | 1          | 12        |
 | 5c   | Aphelion's Control: prefab save history, rollback of what was edited | 1          | 15        |
 | 4d   | Editor polish: pointer wrap, hierarchy rename, more inspector fields | 1          | 10        |
 | 6    | Eclipse Inspector, Serializable, [Range]                             | 2          | 35        |
@@ -39,9 +39,9 @@ File counts include tests and docs. Treat every number as +/- 40%.
 | 15   | Camera system (Cinemachine-like), mesh editing tool (ProBuilder-like) | 2         | 35        |
 | 16   | Input system UI, extensions, Windows build template                  | 3          | 45        |
 | 17   | Documentation pass                                                   | 2          | 25        |
-|      | **Total**                                                            | **about 40** | **about 575** |
+|      | **Total**                                                            | **about 39** | **about 560** |
 
-So roughly 40 more deliveries and 550 to 600 more files, about 750 files in the end.
+So roughly 39 more deliveries and 530 to 590 more files, about 760 files in the end.
 
 ## Where it can grow
 

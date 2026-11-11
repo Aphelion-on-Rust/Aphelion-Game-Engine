@@ -1,4 +1,5 @@
 use crate::hierarchy::{HierarchyController, HierarchyUiModel};
+use crate::history::HistoryModel;
 use crate::keybinds::KeybindModel;
 use crate::layout::LayoutModel;
 use crate::number_field::NumberFieldModel;
@@ -29,6 +30,7 @@ pub struct EditorModels {
     pub theme: ThemeModel,
     pub keybinds: KeybindModel,
     pub hierarchy_ui: HierarchyUiModel,
+    pub history: HistoryModel,
     pub number_field: NumberFieldModel,
     pub input: InputModel,
 }
@@ -69,6 +71,7 @@ impl EditorModels {
             theme: ThemeModel::default(),
             keybinds: KeybindModel::default(),
             hierarchy_ui,
+            history: HistoryModel::default(),
             number_field: NumberFieldModel::default(),
             input: InputModel::default(),
         }
@@ -88,6 +91,7 @@ impl EditorModels {
             theme: ThemeModel::default(),
             keybinds: KeybindModel::default(),
             hierarchy_ui: HierarchyUiModel::default(),
+            history: HistoryModel::default(),
             number_field: NumberFieldModel::default(),
             input: InputModel::default(),
         }

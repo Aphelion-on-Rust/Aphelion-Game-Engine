@@ -10,7 +10,7 @@ pub fn show(ui: &mut egui::Ui, panel: PanelKind) {
         PanelKind::Animator | PanelKind::Timeline => "Animation tools arrive in step 11.",
         PanelKind::Terrain => "The terrain tool arrives in step 14.",
         PanelKind::Profiler => "Performance numbers will appear here.",
-        PanelKind::Hierarchy | PanelKind::Inspector | PanelKind::Project => "",
+        PanelKind::Hierarchy | PanelKind::Inspector | PanelKind::Project | PanelKind::History => "",
     };
 
     ui.label(egui::RichText::new(panel_title(panel)).strong());
