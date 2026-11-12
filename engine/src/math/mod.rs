@@ -3,6 +3,23 @@
 
 use serde::{Deserialize, Serialize};
 
+/// A color with red, green, blue and alpha from 0.0 to 1.0.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Rgba {
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+    pub a: f32,
+}
+
+impl Rgba {
+    pub const WHITE: Rgba = Rgba { r: 1.0, g: 1.0, b: 1.0, a: 1.0 };
+
+    pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
+        Self { r, g, b, a }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Vec2 {
     pub x: f32,
@@ -60,5 +77,27 @@ impl Vec3 {
             1 => self.y = value,
             _ => self.z = value,
         }
+    }
+}
+
+/// `let [x, y, z]: [f32; 3] = vector.into();`
+impl From<Vec3> for [f32; 3] {
+    fn from(vector: Vec3) -> Self {
+        [vector.x, vector.y, vector.z]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_vector_turns_into_an_array_and_axes_can_be_set() {
+        let mut vector = Vec3::new(1.0, 2.0, 3.0);
+
+        vector.set(2, 9.0);
+
+        assert_eq!(<[f32; 3]>::from(vector), [1.0, 2.0, 9.0]);
+        assert_eq!(vector.get(1), 2.0);
     }
 }

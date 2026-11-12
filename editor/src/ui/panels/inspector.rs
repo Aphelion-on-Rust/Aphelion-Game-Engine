@@ -1,20 +1,23 @@
-use crate::number_field::NumberFieldConfig;
 use crate::ui::commands::UiCommand;
-use crate::ui::field::{ComponentField, NumberTarget};
+use crate::ui::field_widgets::{draw_fields, FieldContext};
 use crate::ui::models::EditorModels;
-use crate::ui::number_drag;
 use eframe::egui;
-use flux_engine::identity::{AssetUuid, ComponentId};
+use flux_engine::identity::AssetUuid;
+use flux_engine::inspect::query::{read_field, schema_for};
+use flux_engine::inspect::FieldPath;
 use flux_engine::mivc::Model;
-use flux_engine::scene::{query, ComponentData, ComponentEntry};
+use flux_engine::scene::{query, ComponentData, ComponentEntry, GameObjectData};
 
+/// The Eclipse Inspector panel: the selected object, and each of its components drawn from the
+/// description of its fields (see `field_widgets`).
 pub fn show(ui: &mut egui::Ui, models: &EditorModels, commands: &mut Vec<UiCommand>) {
     let Some(selected) = models.hierarchy_ui.data().selected.first().copied() else {
         ui.weak("Nothing selected");
         return;
     };
 
-    let Some(object) = query::find_object(&models.scene.data().objects, &selected) else {
+    let objects = &models.scene.data().objects;
+    let Some(object) = query::find_object(objects, &selected) else {
         ui.weak("Nothing selected");
         return;
     };
@@ -34,96 +37,71 @@ pub fn show(ui: &mut egui::Ui, models: &EditorModels, commands: &mut Vec<UiComma
         }
     });
     ui.weak(format!("uuid {}", object.uuid));
+
+    if object.prefab_source.is_some() {
+        ui.weak("Instance of a prefab (right-click it in the Hierarchy to apply changes)");
+    }
+
     ui.separator();
 
     egui::ScrollArea::vertical().show(ui, |ui| {
         for entry in &object.components {
-            ui.push_id(entry.id.value(), |ui| component_section(ui, selected, entry, commands));
+            ui.push_id(entry.id.value(), |ui| component_section(ui, models, objects, object, entry, commands));
         }
     });
 }
 
-fn component_section(ui: &mut egui::Ui, object: AssetUuid, entry: &ComponentEntry, commands: &mut Vec<UiCommand>) {
+fn component_section(
+    ui: &mut egui::Ui,
+    models: &EditorModels,
+    objects: &[GameObjectData],
+    object: &GameObjectData,
+    entry: &ComponentEntry,
+    commands: &mut Vec<UiCommand>,
+) {
     let kind = match &entry.data {
         ComponentData::Transform(_) => "Transform",
         ComponentData::RectTransform(_) => "RectTransform",
         ComponentData::Script(_) => "Script",
     };
+    let uuid: AssetUuid = object.uuid;
 
     egui::CollapsingHeader::new(format!("{kind}  (id {})", entry.id.value()))
         .default_open(true)
-        .show(ui, |ui| match &entry.data {
-            ComponentData::Transform(transform) => {
-                let position = NumberFieldConfig { sensitivity: 0.05, ..Default::default() };
-                let rotation = NumberFieldConfig { sensitivity: 0.5, ..Default::default() };
-                let scale = NumberFieldConfig { sensitivity: 0.01, ..Default::default() };
-
-                row3(ui, "Position", object, entry.id, transform.position.into(), ComponentField::Position, &position, commands);
-                row3(ui, "Rotation", object, entry.id, transform.rotation.into(), ComponentField::Rotation, &rotation, commands);
-                row3(ui, "Scale", object, entry.id, transform.scale.into(), ComponentField::Scale, &scale, commands);
-            }
-            ComponentData::RectTransform(rect) => {
-                let size = NumberFieldConfig { sensitivity: 0.5, ..Default::default() };
-                let unit = NumberFieldConfig { sensitivity: 0.005, min: Some(0.0), max: Some(1.0), ..Default::default() };
-
-                row2(ui, "Position", object, entry.id, [rect.position.x, rect.position.y], ComponentField::RectPosition, &size, commands);
-                row2(ui, "Size", object, entry.id, [rect.size.x, rect.size.y], ComponentField::Size, &size, commands);
-                row2(ui, "Anchor Min", object, entry.id, [rect.anchor_min.x, rect.anchor_min.y], ComponentField::AnchorMin, &unit, commands);
-                row2(ui, "Anchor Max", object, entry.id, [rect.anchor_max.x, rect.anchor_max.y], ComponentField::AnchorMax, &unit, commands);
-                row2(ui, "Pivot", object, entry.id, [rect.pivot.x, rect.pivot.y], ComponentField::Pivot, &unit, commands);
-            }
-            ComponentData::Script(script) => {
+        .show(ui, |ui| {
+            if let ComponentData::Script(script) = &entry.data {
                 let mut enabled = script.enabled;
 
                 if ui.checkbox(&mut enabled, "Enabled").changed() {
-                    commands.push(UiCommand::SetScriptEnabled { object, component: entry.id, enabled });
+                    commands.push(UiCommand::SetScriptEnabled { object: uuid, component: entry.id, enabled });
                 }
 
                 ui.weak(format!("script {}", script.script));
             }
+
+            // The fields come from the component's description (built in, or the script's schema).
+            match schema_for(&entry.data, models.schemas.data()) {
+                Some(schema) => {
+                    let context = FieldContext { object: uuid, component: entry.id, objects };
+                    let lookup = |name: &str| read_field(&entry.data, &FieldPath::field(name));
+
+                    draw_fields(ui, &context, &schema, &FieldPath::default(), &lookup, false, commands);
+                }
+                None => {
+                    ui.weak("No field information for this script yet. The scripting host writes it.");
+                }
+            }
+
+            // A Transform / RectTransform can be reset but not removed. Anything else can be removed.
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                if entry.data.is_placement() {
+                    if ui.small_button("Reset").clicked() {
+                        commands.push(UiCommand::ResetComponent { object: uuid, component: entry.id });
+                    }
+                } else if ui.small_button("Remove").clicked() {
+                    commands.push(UiCommand::RemoveComponent { object: uuid, component: entry.id });
+                }
+            });
         });
-}
-
-#[allow(clippy::too_many_arguments)]
-fn row3(
-    ui: &mut egui::Ui,
-    label: &str,
-    object: AssetUuid,
-    component: ComponentId,
-    values: [f32; 3],
-    make_field: fn(usize) -> ComponentField,
-    config: &NumberFieldConfig,
-    commands: &mut Vec<UiCommand>,
-) {
-    ui.horizontal(|ui| {
-        ui.add_sized([80.0, 20.0], egui::Label::new(label));
-
-        for (axis, value) in values.iter().enumerate() {
-            let target = NumberTarget { object, component, field: make_field(axis) };
-
-            number_drag::show(ui, target, *value as f64, config, commands);
-        }
-    });
-}
-
-#[allow(clippy::too_many_arguments)]
-fn row2(
-    ui: &mut egui::Ui,
-    label: &str,
-    object: AssetUuid,
-    component: ComponentId,
-    values: [f32; 2],
-    make_field: fn(usize) -> ComponentField,
-    config: &NumberFieldConfig,
-    commands: &mut Vec<UiCommand>,
-) {
-    ui.horizontal(|ui| {
-        ui.add_sized([80.0, 20.0], egui::Label::new(label));
-
-        for (axis, value) in values.iter().enumerate() {
-            let target = NumberTarget { object, component, field: make_field(axis) };
-
-            number_drag::show(ui, target, *value as f64, config, commands);
-        }
-    });
 }

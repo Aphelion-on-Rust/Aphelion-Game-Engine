@@ -6,7 +6,7 @@ resolver = "2"
 members = ["core", "engine", "editor", "launcher", "scripting", "grp", "extensions"]
 
 [workspace.package]
-version = "0.8.0"
+version = "1.0.0"
 edition = "2021"
 authors = ["atropinex"]
 

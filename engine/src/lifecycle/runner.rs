@@ -150,7 +150,7 @@ mod tests {
             let mut scene = SceneController.create_scene(&mut ids, "Test");
             let object = SceneController.create_object(&mut scene, &mut ids, "Player", None).unwrap();
             let script = IdController.new_uuid(&mut ids);
-            let component = ComponentData::Script(ScriptData { script, enabled: true });
+            let component = ComponentData::Script(ScriptData::new(script, true));
 
             SceneController.add_component(&mut scene, &mut ids, &object, component).unwrap();
 

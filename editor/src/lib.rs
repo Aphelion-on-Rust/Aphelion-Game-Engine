@@ -15,6 +15,7 @@ pub mod history;
 pub mod keybinds;
 pub mod layout;
 pub mod number_field;
+pub mod prefab_library;
 pub mod project_io;
 pub mod theme;
 pub mod ui;

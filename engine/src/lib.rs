@@ -10,10 +10,12 @@
 // `flux_engine::mivc::...` and `crate::mivc::...` keep working.
 pub use flux_core::{error, mivc, storage};
 
+pub mod control;
 pub mod game_loop;
 pub mod gc;
 pub mod identity;
 pub mod input;
+pub mod inspect;
 pub mod lifecycle;
 pub mod math;
 pub mod prefab;

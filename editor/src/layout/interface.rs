@@ -14,6 +14,8 @@ pub enum PanelKind {
     Terrain,
     Profiler,
     History,
+    /// Aphelion's Control: prefab history.
+    Control,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
