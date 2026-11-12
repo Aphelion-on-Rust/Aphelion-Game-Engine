@@ -51,6 +51,19 @@ impl HierarchyController {
         }
     }
 
+    /// Starts renaming an object in the panel. It also selects it.
+    pub fn begin_rename(&self, ui: &mut HierarchyUiModel, object: AssetUuid) {
+        let data = self.write(ui);
+
+        data.selected = vec![object];
+        data.renaming = Some(object);
+    }
+
+    /// Stops renaming (the new name was accepted or cancelled).
+    pub fn end_rename(&self, ui: &mut HierarchyUiModel) {
+        self.write(ui).renaming = None;
+    }
+
     /// Forgets selected / opened objects that no longer exist (after an undo, for example).
     pub fn prune_missing(&self, ui: &mut HierarchyUiModel, scene: &SceneModel) {
         let objects = &scene.data().objects;
@@ -58,6 +71,10 @@ impl HierarchyController {
 
         data.selected.retain(|uuid| query::find_object(objects, uuid).is_some());
         data.expanded.retain(|uuid| query::find_object(objects, uuid).is_some());
+
+        if data.renaming.map_or(false, |uuid| query::find_object(objects, &uuid).is_none()) {
+            data.renaming = None;
+        }
     }
 
     /// Makes a new object, selects it, and opens its parent so it can be seen.
@@ -248,5 +265,33 @@ mod tests {
         HierarchyController.expand_to_show(&mut setup.ui, &setup.scene, &setup.child);
 
         assert!(setup.ui.data().expanded.contains(&setup.parent));
+    }
+
+    #[test]
+    fn renaming_selects_the_object_and_ends_cleanly() {
+        let mut setup = setup();
+
+        HierarchyController.begin_rename(&mut setup.ui, setup.other);
+
+        assert_eq!(setup.ui.data().renaming, Some(setup.other));
+        assert_eq!(setup.ui.data().selected, vec![setup.other]);
+
+        let mut view = HierarchyView::default();
+        view.render((&setup.scene, &setup.ui));
+        assert!(view.rows().iter().any(|row| row.renaming && row.uuid == setup.other));
+
+        HierarchyController.end_rename(&mut setup.ui);
+        assert_eq!(setup.ui.data().renaming, None);
+    }
+
+    #[test]
+    fn renaming_stops_if_the_object_disappears() {
+        let mut setup = setup();
+
+        HierarchyController.begin_rename(&mut setup.ui, setup.other);
+        SceneController.destroy_object(&mut setup.scene, &setup.other).unwrap();
+        HierarchyController.prune_missing(&mut setup.ui, &setup.scene);
+
+        assert_eq!(setup.ui.data().renaming, None);
     }
 }

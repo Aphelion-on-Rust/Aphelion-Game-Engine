@@ -1,7 +1,7 @@
 //! Commands: what the user asked for. Views push them, `apply_all` runs them.
 //! This is the only place where the UI layer changes models, always through a controller.
 
-use super::field::{write_field, ComponentField, NumberTarget};
+use super::field::{with_number, NumberTarget};
 use super::models::EditorModels;
 use crate::hierarchy::HierarchyController;
 use crate::history::HistoryController;
@@ -9,10 +9,11 @@ use crate::keybinds::actions;
 use crate::layout::{DropZone, LayoutController, PanelKind};
 use crate::number_field::{DragPhase, DragSpeed, NumberFieldConfig, NumberFieldController};
 use crate::theme::ThemeController;
-use flux_engine::error::EngineResult;
+use flux_engine::error::{EngineError, EngineResult};
 use flux_engine::identity::{AssetUuid, ComponentId};
+use flux_engine::inspect::{FieldPath, FieldValue, InspectController};
 use flux_engine::mivc::Model;
-use flux_engine::scene::{ComponentData, SceneController};
+use flux_engine::scene::{ComponentData, RectTransformData, SceneController, TransformData};
 
 #[derive(Clone, Debug)]
 pub enum UiCommand {
@@ -27,6 +28,11 @@ pub enum UiCommand {
     SetTheme(String),
     // project
     SaveScene,
+    // prefabs (they need the disk, so the app does the work, see IoRequest)
+    CreatePrefab,
+    ApplyToPrefab,
+    PlacePrefab { file: String },
+    RevertRevision { prefab: AssetUuid, number: u32 },
     // history
     Undo,
     Redo,
@@ -42,8 +48,25 @@ pub enum UiCommand {
     Reparent { object: AssetUuid, new_parent: Option<AssetUuid> },
     SetObjectActive { object: AssetUuid, active: bool },
     RenameObject { object: AssetUuid, name: String },
+    /// Start renaming in the hierarchy (double-click or F2).
+    BeginRename(AssetUuid),
+    /// The text box was confirmed. An empty name changes nothing.
+    FinishRename { object: AssetUuid, name: String },
+    CancelRename,
     // components
     SetScriptEnabled { object: AssetUuid, component: ComponentId, enabled: bool },
+    /// Take a component off an object. A Transform or RectTransform can't be removed.
+    RemoveComponent { object: AssetUuid, component: ComponentId },
+    /// Put a Transform or RectTransform back to its default values.
+    ResetComponent { object: AssetUuid, component: ComponentId },
+    /// Set a field (or a value inside a struct or list) from the Eclipse Inspector.
+    SetField { object: AssetUuid, component: ComponentId, path: FieldPath, value: FieldValue },
+    /// Put a field back to its default.
+    ResetField { object: AssetUuid, component: ComponentId, path: FieldPath },
+    /// Add an element to a list field.
+    ListPush { object: AssetUuid, component: ComponentId, path: FieldPath },
+    /// Remove one element of a list field.
+    ListRemove { object: AssetUuid, component: ComponentId, path: FieldPath, index: usize },
     // slide-to-change number fields
     NumberHover,
     NumberDragBegin { target: NumberTarget, value: f64, config: NumberFieldConfig },
@@ -62,10 +85,36 @@ impl UiCommand {
             UiCommand::Reparent { .. } => Some(("Move object".to_string(), None)),
             UiCommand::SetObjectActive { .. } => Some(("Turn object on/off".to_string(), None)),
             UiCommand::SetScriptEnabled { .. } => Some(("Turn script on/off".to_string(), None)),
-            UiCommand::RenameObject { object, .. } => Some(("Rename".to_string(), Some(format!("rename:{object}")))),
+            UiCommand::RenameObject { object, .. } | UiCommand::FinishRename { object, .. } => {
+                Some(("Rename".to_string(), Some(format!("rename:{object}"))))
+            }
+            UiCommand::RemoveComponent { .. } => Some(("Remove component".to_string(), None)),
+            UiCommand::ResetComponent { .. } => Some(("Reset component".to_string(), None)),
+            // Typing in one field is one step: steps for the same field are merged.
+            UiCommand::SetField { object, component, path, .. } => Some((
+                "Change value".to_string(),
+                Some(format!("field:{object}:{}:{:?}", component.value(), path.segments())),
+            )),
+            UiCommand::ResetField { .. } => Some(("Reset value".to_string(), None)),
+            UiCommand::ListPush { .. } => Some(("Add list element".to_string(), None)),
+            UiCommand::ListRemove { .. } => Some(("Remove list element".to_string(), None)),
             _ => None,
         }
     }
+}
+
+/// Work that needs the disk. The command layer only asks for it, the app does it
+/// (see `prefab_flow`).
+#[derive(Clone, Debug, PartialEq)]
+pub enum IoRequest {
+    /// Save the selected object as a prefab.
+    CreatePrefab,
+    /// Write the selected prefab instance back into its prefab.
+    ApplyToPrefab,
+    /// Put a copy of a prefab in the scene. `file` is inside the project.
+    PlacePrefab { file: String },
+    /// Undo one revision of a prefab (Aphelion's Control).
+    RevertRevision { prefab: AssetUuid, number: u32 },
 }
 
 /// State the controller side needs between frames. Not a model, nothing here is saved.
@@ -81,6 +130,8 @@ pub struct ControllerState {
     pub settings_dirty: bool,
     /// The user asked to save the scene. The app does the file writing.
     pub save_requested: bool,
+    /// Prefab work waiting for the app (it needs the disk).
+    pub pending_io: Vec<IoRequest>,
 }
 
 impl Default for ControllerState {
@@ -91,6 +142,7 @@ impl Default for ControllerState {
             drag_x: 0.0,
             settings_dirty: false,
             save_requested: false,
+            pending_io: Vec::new(),
         }
     }
 }
@@ -118,6 +170,7 @@ pub fn apply_all(commands: Vec<UiCommand>, models: &mut EditorModels, state: &mu
 pub fn action_to_command(action: &str, models: &EditorModels) -> Option<UiCommand> {
     match action {
         actions::SAVE => Some(UiCommand::SaveScene),
+        actions::RENAME => models.hierarchy_ui.data().selected.first().copied().map(UiCommand::BeginRename),
         actions::UNDO => Some(UiCommand::Undo),
         actions::REDO => Some(UiCommand::Redo),
         actions::DELETE => Some(UiCommand::DeleteSelected),
@@ -128,10 +181,13 @@ pub fn action_to_command(action: &str, models: &EditorModels) -> Option<UiComman
     }
 }
 
-fn write_to_scene(models: &mut EditorModels, target: NumberTarget, value: f64) -> EngineResult<()> {
-    SceneController.update_component(&mut models.scene, &target.object, target.component, |data| {
-        write_field(data, target.field, value)
-    })
+/// A number box changed one number of a field. The field's rules (range, min ...) are applied.
+fn write_to_scene(models: &mut EditorModels, target: &NumberTarget, number: f64) -> EngineResult<()> {
+    let current = InspectController.get_field(&models.scene, &target.object, target.component, &target.path)?;
+    let value = with_number(&current, target.part, number)
+        .ok_or_else(|| EngineError::InvalidOperation("that field has no such number".to_string()))?;
+
+    InspectController.set_field(&mut models.scene, &models.schemas, &target.object, target.component, &target.path, value)
 }
 
 enum Direction {
@@ -219,6 +275,12 @@ fn apply(command: UiCommand, models: &mut EditorModels, state: &mut ControllerSt
         // ----- project -----
         UiCommand::SaveScene => state.save_requested = true,
 
+        // ----- prefabs -----
+        UiCommand::CreatePrefab => state.pending_io.push(IoRequest::CreatePrefab),
+        UiCommand::ApplyToPrefab => state.pending_io.push(IoRequest::ApplyToPrefab),
+        UiCommand::PlacePrefab { file } => state.pending_io.push(IoRequest::PlacePrefab { file }),
+        UiCommand::RevertRevision { prefab, number } => state.pending_io.push(IoRequest::RevertRevision { prefab, number }),
+
         // ----- history -----
         UiCommand::Undo => step_history(models, state, Direction::Back, 1),
         UiCommand::Redo => step_history(models, state, Direction::Forward, 1),
@@ -255,6 +317,15 @@ fn apply(command: UiCommand, models: &mut EditorModels, state: &mut ControllerSt
         UiCommand::RenameObject { object, name } => {
             SceneController.rename_object(&mut models.scene, &object, &name)?;
         }
+        UiCommand::BeginRename(object) => HierarchyController.begin_rename(&mut models.hierarchy_ui, object),
+        UiCommand::FinishRename { object, name } => {
+            HierarchyController.end_rename(&mut models.hierarchy_ui);
+
+            if !name.trim().is_empty() {
+                SceneController.rename_object(&mut models.scene, &object, name.trim())?;
+            }
+        }
+        UiCommand::CancelRename => HierarchyController.end_rename(&mut models.hierarchy_ui),
 
         // ----- components -----
         UiCommand::SetScriptEnabled { object, component, enabled } => {
@@ -263,6 +334,31 @@ fn apply(command: UiCommand, models: &mut EditorModels, state: &mut ControllerSt
                     script.enabled = enabled;
                 }
             })?;
+        }
+
+        UiCommand::RemoveComponent { object, component } => {
+            SceneController.remove_component(&mut models.scene, &object, component)?;
+        }
+        UiCommand::ResetComponent { object, component } => {
+            SceneController.update_component(&mut models.scene, &object, component, |data| match data {
+                ComponentData::Transform(transform) => *transform = TransformData::default(),
+                ComponentData::RectTransform(rect) => *rect = RectTransformData::default(),
+                ComponentData::Script(_) => {}
+            })?;
+        }
+
+        // ----- fields (Eclipse Inspector) -----
+        UiCommand::SetField { object, component, path, value } => {
+            InspectController.set_field(&mut models.scene, &models.schemas, &object, component, &path, value)?;
+        }
+        UiCommand::ResetField { object, component, path } => {
+            InspectController.reset_field(&mut models.scene, &models.schemas, &object, component, &path)?;
+        }
+        UiCommand::ListPush { object, component, path } => {
+            InspectController.list_push(&mut models.scene, &models.schemas, &object, component, &path)?;
+        }
+        UiCommand::ListRemove { object, component, path, index } => {
+            InspectController.list_remove(&mut models.scene, &models.schemas, &object, component, &path, index)?;
         }
 
         // ----- number fields -----
@@ -276,11 +372,11 @@ fn apply(command: UiCommand, models: &mut EditorModels, state: &mut ControllerSt
         }
         UiCommand::NumberDragMove { delta_x, speed } => {
             // The pointer may still move for a frame after Escape. Ignore that.
-            if let (true, Some(target)) = (is_dragging(models), state.active_target) {
+            if let (true, Some(target)) = (is_dragging(models), state.active_target.clone()) {
                 state.drag_x += delta_x;
 
                 let value = NumberFieldController.drag_to(&mut models.number_field, state.drag_x, speed)?;
-                write_to_scene(models, target, value)?;
+                write_to_scene(models, &target, value)?;
             }
         }
         UiCommand::NumberDragEnd => {
@@ -292,9 +388,9 @@ fn apply(command: UiCommand, models: &mut EditorModels, state: &mut ControllerSt
             state.active_target = None;
         }
         UiCommand::NumberDragCancel => {
-            if let (true, Some(target)) = (is_dragging(models), state.active_target) {
+            if let (true, Some(target)) = (is_dragging(models), state.active_target.clone()) {
                 let old_value = NumberFieldController.cancel_drag(&mut models.number_field)?;
-                write_to_scene(models, target, old_value)?;
+                write_to_scene(models, &target, old_value)?;
             }
 
             HistoryController.cancel_group(&mut models.history);
@@ -308,6 +404,7 @@ fn apply(command: UiCommand, models: &mut EditorModels, state: &mut ControllerSt
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ui::field::Part;
     use crate::number_field::NumberFieldConfig;
     use crate::theme::query::active_theme;
     use flux_engine::scene::query;
@@ -325,7 +422,8 @@ mod tests {
         NumberTarget {
             object: object.uuid,
             component: object.components[0].id,
-            field: ComponentField::Position(0),
+            path: FieldPath::field("position"),
+            part: Part::X,
         }
     }
 
@@ -537,5 +635,229 @@ mod tests {
 
         apply_all(vec![UiCommand::RedoSteps(2)], &mut models, &mut state);
         assert_eq!(models.scene.data().objects.len(), count + 3);
+    }
+
+    #[test]
+    fn prefab_commands_are_queued_for_the_app() {
+        let mut models = EditorModels::new_demo();
+        let mut state = ControllerState::default();
+        let prefab = models.scene.data().uuid; // any uuid will do for this check
+
+        apply_all(
+            vec![
+                UiCommand::CreatePrefab,
+                UiCommand::PlacePrefab { file: "Assets/Prefabs/Tree.prefab.yaml".to_string() },
+                UiCommand::RevertRevision { prefab, number: 2 },
+            ],
+            &mut models,
+            &mut state,
+        );
+
+        assert_eq!(
+            state.pending_io,
+            vec![
+                IoRequest::CreatePrefab,
+                IoRequest::PlacePrefab { file: "Assets/Prefabs/Tree.prefab.yaml".to_string() },
+                IoRequest::RevertRevision { prefab, number: 2 },
+            ]
+        );
+    }
+
+    #[test]
+    fn renaming_in_the_hierarchy_is_one_undo_step_and_cancel_or_an_empty_name_change_nothing() {
+        let mut models = EditorModels::new_demo();
+        let mut state = ControllerState::default();
+        let object = models.scene.data().objects[0].uuid;
+        let original = models.scene.data().objects[0].name.clone();
+
+        apply_all(vec![UiCommand::BeginRename(object)], &mut models, &mut state);
+        assert_eq!(models.hierarchy_ui.data().renaming, Some(object));
+
+        apply_all(vec![UiCommand::FinishRename { object, name: "  Camera  ".to_string() }], &mut models, &mut state);
+        assert_eq!(models.scene.data().objects[0].name, "Camera");
+        assert_eq!(models.hierarchy_ui.data().renaming, None);
+        assert_eq!(models.history.data().undo.len(), 1);
+
+        apply_all(vec![UiCommand::Undo], &mut models, &mut state);
+        assert_eq!(models.scene.data().objects[0].name, original);
+
+        apply_all(vec![UiCommand::BeginRename(object), UiCommand::CancelRename], &mut models, &mut state);
+        apply_all(
+            vec![UiCommand::BeginRename(object), UiCommand::FinishRename { object, name: "   ".to_string() }],
+            &mut models,
+            &mut state,
+        );
+
+        assert_eq!(models.scene.data().objects[0].name, original);
+        assert_eq!(models.hierarchy_ui.data().renaming, None);
+        assert!(models.history.data().undo.is_empty());
+    }
+
+    #[test]
+    fn f2_starts_renaming_the_selected_object() {
+        let mut models = EditorModels::new_demo();
+        let object = models.scene.data().objects[0].uuid;
+
+        assert!(action_to_command(actions::RENAME, &models).is_none()); // nothing selected
+
+        crate::hierarchy::HierarchyController.select_only(&mut models.hierarchy_ui, object);
+
+        assert!(matches!(action_to_command(actions::RENAME, &models), Some(UiCommand::BeginRename(found)) if found == object));
+    }
+
+    #[test]
+    fn a_script_can_be_removed_and_a_transform_can_be_reset_but_a_transform_cannot_be_removed() {
+        let mut models = EditorModels::new_demo();
+        let mut state = ControllerState::default();
+        let player = models.scene.data().objects.iter().find(|object| object.name == "Player").unwrap().clone();
+        let transform = player.components[0].id;
+        let script = player.components[1].id;
+        let components = |models: &EditorModels| {
+            models.scene.data().objects.iter().find(|object| object.name == "Player").unwrap().components.len()
+        };
+
+        // Reset: move the player, then reset the Transform.
+        InspectController
+            .set_field(
+                &mut models.scene,
+                &models.schemas,
+                &player.uuid,
+                transform,
+                &FieldPath::field("position"),
+                FieldValue::Vec3(flux_engine::math::Vec3::new(9.0, 0.0, 0.0)),
+            )
+            .unwrap();
+        apply_all(vec![UiCommand::ResetComponent { object: player.uuid, component: transform }], &mut models, &mut state);
+
+        let moved_back = models.scene.data().objects.iter().find(|object| object.name == "Player").unwrap();
+        assert_eq!(
+            flux_engine::inspect::query::read_field(&moved_back.components[0].data, &FieldPath::field("position")),
+            Some(FieldValue::Vec3(flux_engine::math::Vec3::ZERO))
+        );
+
+        // Remove the script, then undo that.
+        apply_all(vec![UiCommand::RemoveComponent { object: player.uuid, component: script }], &mut models, &mut state);
+        assert_eq!(components(&models), 1);
+        apply_all(vec![UiCommand::Undo], &mut models, &mut state);
+        assert_eq!(components(&models), 2);
+
+        // The Transform stays, and the refusal shows in the status bar.
+        apply_all(vec![UiCommand::RemoveComponent { object: player.uuid, component: transform }], &mut models, &mut state);
+        assert_eq!(components(&models), 2);
+        assert_ne!(state.status, "Ready");
+    }
+
+    // ----- the Eclipse Inspector commands, tried on the demo Player script -----
+
+    fn player_script(models: &EditorModels) -> (AssetUuid, ComponentId) {
+        let player = models.scene.data().objects.iter().find(|object| object.name == "Player").unwrap();
+
+        (player.uuid, player.components[1].id)
+    }
+
+    fn script_value(models: &EditorModels, path: &FieldPath) -> Option<FieldValue> {
+        let player = models.scene.data().objects.iter().find(|object| object.name == "Player").unwrap();
+
+        flux_engine::inspect::query::read_field(&player.components[1].data, path)
+    }
+
+    #[test]
+    fn a_script_field_follows_its_range_and_typing_is_one_undo_step() {
+        let mut models = EditorModels::new_demo();
+        let mut state = ControllerState::default();
+        let (object, component) = player_script(&models);
+        let speed = FieldPath::field("speed");
+        let set = |value: f64| UiCommand::SetField { object, component, path: FieldPath::field("speed"), value: FieldValue::Float(value) };
+
+        apply_all(vec![set(50.0), set(3.0), set(4.0)], &mut models, &mut state);
+
+        assert_eq!(script_value(&models, &speed), Some(FieldValue::Float(4.0)));
+        assert_eq!(models.history.data().undo.len(), 1);
+
+        apply_all(vec![UiCommand::Undo], &mut models, &mut state);
+        assert_eq!(script_value(&models, &speed), Some(FieldValue::Float(5.0))); // the schema's default
+    }
+
+    #[test]
+    fn a_field_value_of_the_wrong_kind_changes_nothing_and_says_why() {
+        let mut models = EditorModels::new_demo();
+        let mut state = ControllerState::default();
+        let (object, component) = player_script(&models);
+
+        apply_all(
+            vec![UiCommand::SetField { object, component, path: FieldPath::field("speed"), value: FieldValue::Bool(true) }],
+            &mut models,
+            &mut state,
+        );
+
+        assert_eq!(script_value(&models, &FieldPath::field("speed")), Some(FieldValue::Float(5.0)));
+        assert!(state.status.contains("can't hold"));
+        assert!(models.history.data().undo.is_empty());
+    }
+
+    #[test]
+    fn list_elements_can_be_added_changed_and_removed_and_a_field_can_be_reset() {
+        let mut models = EditorModels::new_demo();
+        let mut state = ControllerState::default();
+        let (object, component) = player_script(&models);
+        let waypoints = FieldPath::field("waypoints");
+
+        apply_all(
+            vec![
+                UiCommand::ListPush { object, component, path: waypoints.clone() },
+                UiCommand::ListPush { object, component, path: waypoints.clone() },
+                UiCommand::SetField {
+                    object,
+                    component,
+                    path: waypoints.child_index(1),
+                    value: FieldValue::Vec3(flux_engine::math::Vec3::new(1.0, 2.0, 3.0)),
+                },
+                UiCommand::ListRemove { object, component, path: waypoints.clone(), index: 0 },
+            ],
+            &mut models,
+            &mut state,
+        );
+
+        assert_eq!(
+            script_value(&models, &waypoints),
+            Some(FieldValue::List(vec![FieldValue::Vec3(flux_engine::math::Vec3::new(1.0, 2.0, 3.0))]))
+        );
+
+        apply_all(
+            vec![
+                UiCommand::SetField { object, component, path: FieldPath::field("speed"), value: FieldValue::Float(9.0) },
+                UiCommand::ResetField { object, component, path: FieldPath::field("speed") },
+            ],
+            &mut models,
+            &mut state,
+        );
+
+        assert_eq!(script_value(&models, &FieldPath::field("speed")), Some(FieldValue::Float(5.0)));
+    }
+
+    #[test]
+    fn dragging_a_number_inside_a_struct_of_a_script_changes_it_in_one_undo_step() {
+        let mut models = EditorModels::new_demo();
+        let mut state = ControllerState::default();
+        let (object, component) = player_script(&models);
+        let armor = FieldPath::field("stats").child_field("armor");
+        let target = NumberTarget { object, component, path: armor.clone(), part: Part::Whole };
+
+        apply_all(
+            vec![
+                UiCommand::NumberDragBegin { target, value: 0.0, config: NumberFieldConfig::default() },
+                UiCommand::NumberDragMove { delta_x: 100.0, speed: DragSpeed::Normal },
+                UiCommand::NumberDragEnd,
+            ],
+            &mut models,
+            &mut state,
+        );
+
+        match script_value(&models, &armor) {
+            Some(FieldValue::Float(value)) => assert!((value - 10.0).abs() < 1e-9),
+            other => panic!("expected a float, got {other:?}"),
+        }
+
+        assert_eq!(models.history.data().undo.len(), 1);
     }
 }

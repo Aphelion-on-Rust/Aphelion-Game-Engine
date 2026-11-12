@@ -194,6 +194,17 @@ impl SceneController {
         Ok(())
     }
 
+    /// Marks an object as the root of an instance of a prefab (or clears the mark).
+    pub fn set_prefab_source(
+        &self,
+        scene: &mut SceneModel,
+        object: &AssetUuid,
+        source: Option<AssetUuid>,
+    ) -> EngineResult<()> {
+        find_mut(&mut self.write(scene).objects, object)?.prefab_source = source;
+        Ok(())
+    }
+
     pub fn rename_object(&self, scene: &mut SceneModel, object: &AssetUuid, name: &str) -> EngineResult<()> {
         find_mut(&mut self.write(scene).objects, object)?.name = name.to_string();
         Ok(())

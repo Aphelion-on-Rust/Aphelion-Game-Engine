@@ -1,4 +1,5 @@
 use crate::identity::{AssetUuid, ComponentId};
+use crate::inspect::FieldEntry;
 use crate::math::{Vec2, Vec3};
 use crate::mivc::Interface;
 use serde::{Deserialize, Serialize};
@@ -47,6 +48,17 @@ pub struct ScriptData {
     pub script: AssetUuid,
     /// A disabled script gets no Update, FixedUpdate, mouse events ...
     pub enabled: bool,
+    /// The values of the script's serialized fields (what the Inspector edits).
+    /// Which fields exist comes from the script's schema, see the `inspect` module.
+    #[serde(default)]
+    pub fields: Vec<FieldEntry>,
+}
+
+impl ScriptData {
+    /// A script with no field values yet.
+    pub fn new(script: AssetUuid, enabled: bool) -> Self {
+        Self { script, enabled, fields: Vec::new() }
+    }
 }
 
 /// The data of one component. Step 3 adds the rest of the catalog here

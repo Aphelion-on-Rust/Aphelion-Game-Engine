@@ -8,6 +8,8 @@ use std::collections::BTreeSet;
 pub struct HierarchyUiData {
     pub expanded: BTreeSet<AssetUuid>,
     pub selected: Vec<AssetUuid>,
+    /// The object being renamed in the panel (double-click or F2), if any.
+    pub renaming: Option<AssetUuid>,
 }
 
 impl Interface for HierarchyUiData {
@@ -29,4 +31,8 @@ pub struct HierarchyRow {
     pub active: bool,
     /// False if the object or any parent is off. Draw these greyed out.
     pub active_in_hierarchy: bool,
+    /// The object is the root of an instance of a prefab.
+    pub is_prefab_root: bool,
+    /// The row shows a text box instead of the name.
+    pub renaming: bool,
 }

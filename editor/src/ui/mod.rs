@@ -13,11 +13,13 @@ pub mod app;
 pub mod commands;
 pub mod dock_view;
 pub mod field;
+pub mod field_widgets;
 pub mod input_bridge;
 pub mod menu_bar;
 pub mod models;
 pub mod number_drag;
 pub mod panels;
+pub mod prefab_flow;
 pub mod theme_apply;
 
 pub use app::EditorApp;

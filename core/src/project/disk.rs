@@ -27,7 +27,7 @@ pub fn create_project(root: &Path, data: &ProjectData) -> EngineResult<()> {
     }
 
     if data.aphelion_control {
-        fs::create_dir_all(layout::aphelion_folder(root))?;
+        fs::create_dir_all(layout::aphelion_prefabs_folder(root))?;
     }
 
     let ignore_file = root.join(".gitignore");

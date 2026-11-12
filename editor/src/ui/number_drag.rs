@@ -5,7 +5,7 @@
 
 use super::commands::UiCommand;
 use super::field::NumberTarget;
-use crate::number_field::{DragSpeed, NumberFieldConfig};
+use crate::number_field::{is_jump, DragSpeed, NumberFieldConfig};
 use eframe::egui;
 
 pub fn show(
@@ -44,8 +44,12 @@ pub fn show(
     if response.dragged() {
         let (delta_x, modifiers) = ui.input(|state| (state.pointer.delta().x, state.modifiers));
         let speed = DragSpeed::from_keys(modifiers.shift, modifiers.ctrl || modifiers.command);
+        let width = ui.ctx().screen_rect().width();
 
-        commands.push(UiCommand::NumberDragMove { delta_x: delta_x as f64, speed });
+        // The pointer is moved to the other side of the window at the edges. That jump is not a drag.
+        if !is_jump(delta_x, width) {
+            commands.push(UiCommand::NumberDragMove { delta_x: delta_x as f64, speed });
+        }
     }
 
     if response.drag_stopped() {

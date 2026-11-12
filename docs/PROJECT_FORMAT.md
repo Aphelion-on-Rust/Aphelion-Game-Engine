@@ -9,11 +9,12 @@ MyGame/
   .gitignore              ignores Library/
   Assets/
     Scenes/               <name>.scene.yaml
-    Prefabs/              (prefabs arrive with the asset steps)
+    Prefabs/              <name>.prefab.yaml
     Scripts/              (C# scripts arrive with the scripting step)
   Settings/
   Library/                id_registry.yaml (and later caches). Safe to ignore in git.
   .aphelion/              only if Aphelion's Control was chosen at creation
+    prefabs/              one history file per prefab (see docs/APHELION_CONTROL.md)
 ```
 
 ## project.yaml

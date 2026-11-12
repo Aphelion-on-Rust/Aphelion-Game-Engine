@@ -1,5 +1,6 @@
 //! The content of each panel. Every panel is a view: `&EditorModels` in, commands out.
 
+pub mod control;
 pub mod hierarchy;
 pub mod history;
 pub mod inspector;
@@ -12,8 +13,9 @@ use crate::hierarchy::HierarchyView;
 use crate::history::HistoryView;
 use crate::layout::PanelKind;
 use eframe::egui;
+use flux_engine::control::ControlView;
 
-pub const ALL_PANELS: [PanelKind; 11] = [
+pub const ALL_PANELS: [PanelKind; 12] = [
     PanelKind::Hierarchy,
     PanelKind::Scene,
     PanelKind::Game,
@@ -25,6 +27,7 @@ pub const ALL_PANELS: [PanelKind; 11] = [
     PanelKind::Terrain,
     PanelKind::Profiler,
     PanelKind::History,
+    PanelKind::Control,
 ];
 
 pub fn panel_title(panel: PanelKind) -> &'static str {
@@ -40,6 +43,7 @@ pub fn panel_title(panel: PanelKind) -> &'static str {
         PanelKind::Terrain => "Terrain",
         PanelKind::Profiler => "Profiler",
         PanelKind::History => "History",
+        PanelKind::Control => "Aphelion's Control",
     }
 }
 
@@ -47,7 +51,9 @@ pub fn panel_title(panel: PanelKind) -> &'static str {
 #[derive(Default)]
 pub struct PanelViews {
     pub hierarchy: HierarchyView,
+    pub rename: hierarchy::RenameBuffer,
     pub history: HistoryView,
+    pub control: ControlView,
 }
 
 pub fn show_panel(
@@ -58,9 +64,10 @@ pub fn show_panel(
     commands: &mut Vec<UiCommand>,
 ) {
     match panel {
-        PanelKind::Hierarchy => hierarchy::show(ui, &mut views.hierarchy, models, commands),
+        PanelKind::Hierarchy => hierarchy::show(ui, &mut views.hierarchy, &mut views.rename, models, commands),
         PanelKind::Inspector => inspector::show(ui, models, commands),
-        PanelKind::Project => project::show(ui, models),
+        PanelKind::Project => project::show(ui, models, commands),
+        PanelKind::Control => control::show(ui, &mut views.control, models, commands),
         PanelKind::History => history::show(ui, &mut views.history, models, commands),
         other => placeholder::show(ui, other),
     }

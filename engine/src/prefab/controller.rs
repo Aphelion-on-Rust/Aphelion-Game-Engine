@@ -4,7 +4,7 @@ use crate::error::{EngineError, EngineResult};
 use crate::identity::{AssetUuid, IdController, IdRegistryModel};
 use crate::mivc::{Controller, Model, Store};
 use crate::scene::copy::duplicate_subtree;
-use crate::scene::{query, SceneModel};
+use crate::scene::{query, ComponentEntry, GameObjectData, SceneModel};
 
 pub struct PrefabController;
 
@@ -27,6 +27,33 @@ impl PrefabController {
             name: name.to_string(),
             objects,
         }))
+    }
+
+    /// Writes the current state of a scene instance back into the prefab ("Apply").
+    ///
+    /// The instance and the prefab are lined up branch by branch (the first child with the first
+    /// child, and so on) and components are lined up by kind. Everything that lines up keeps the
+    /// prefab's own uuid and component id. New parts get new ids, parts that are gone are removed.
+    pub fn update_from_instance(
+        &self,
+        prefab: &mut PrefabModel,
+        scene: &SceneModel,
+        ids: &mut IdRegistryModel,
+        instance_root: &AssetUuid,
+    ) -> EngineResult<()> {
+        let root = query::find_object(&scene.data().objects, instance_root)
+            .ok_or_else(|| EngineError::ObjectNotFound(instance_root.to_string()))?;
+
+        if root.prefab_source != Some(prefab.data().uuid) {
+            return Err(EngineError::InvalidOperation("that object is not an instance of this prefab".to_string()));
+        }
+
+        let prefab_root = prefab.data().objects.first().map(|object| object.uuid);
+        let mut objects = Vec::new();
+
+        collect_branch(&scene.data().objects, instance_root, &prefab.data().objects, prefab_root, None, ids, &mut objects)?;
+        self.write(prefab).objects = objects;
+        Ok(())
     }
 
     /// Places a copy of the prefab in a scene. Returns the uuid of the new root object.
@@ -63,6 +90,64 @@ impl PrefabController {
 
         Ok(new_root)
     }
+}
+
+/// Copies an instance branch into `out` (parents first). `counterpart` is the prefab object it
+/// lines up with, if any: its uuid and component ids are reused.
+fn collect_branch(
+    instance: &[GameObjectData],
+    instance_uuid: &AssetUuid,
+    prefab_objects: &[GameObjectData],
+    counterpart: Option<AssetUuid>,
+    parent: Option<AssetUuid>,
+    ids: &mut IdRegistryModel,
+    out: &mut Vec<GameObjectData>,
+) -> EngineResult<AssetUuid> {
+    let source = query::find_object(instance, instance_uuid)
+        .ok_or_else(|| EngineError::ObjectNotFound(instance_uuid.to_string()))?;
+    let matching = counterpart.and_then(|uuid| query::find_object(prefab_objects, &uuid));
+    let uuid = match matching {
+        Some(node) => node.uuid,
+        None => IdController.new_uuid(ids),
+    };
+
+    // Components line up by kind, in order.
+    let mut unused: Vec<&ComponentEntry> = matching.map(|node| node.components.iter().collect()).unwrap_or_default();
+    let mut components = Vec::new();
+
+    for component in &source.components {
+        let kind = std::mem::discriminant(&component.data);
+        let id = match unused.iter().position(|old| std::mem::discriminant(&old.data) == kind) {
+            Some(position) => unused.remove(position).id,
+            None => IdController.new_component_id(ids),
+        };
+
+        components.push(ComponentEntry { id, data: component.data.clone() });
+    }
+
+    // The object goes in before its children, so parents always come first.
+    let index = out.len();
+
+    out.push(GameObjectData {
+        uuid,
+        name: source.name.clone(),
+        active: source.active,
+        parent,
+        children: Vec::new(),
+        components,
+        prefab_source: None,
+    });
+
+    let mut children = Vec::new();
+
+    for (position, child) in source.children.iter().enumerate() {
+        let child_counterpart = matching.and_then(|node| node.children.get(position)).copied();
+
+        children.push(collect_branch(instance, child, prefab_objects, child_counterpart, Some(uuid), ids, out)?);
+    }
+
+    out[index].children = children;
+    Ok(uuid)
 }
 
 #[cfg(test)]
@@ -106,5 +191,50 @@ mod tests {
         let object = query::find_object(&scene.data().objects, &placed).unwrap();
 
         assert_eq!(object.prefab_source, Some(prefab.data().uuid));
+    }
+
+    #[test]
+    fn updating_a_prefab_keeps_its_ids_and_gives_new_parts_new_ids() {
+        let mut ids = IdRegistryModel::default();
+        let mut scene = SceneController.create_scene(&mut ids, "Test");
+        let tree = SceneController.create_object(&mut scene, &mut ids, "Tree", None).unwrap();
+        SceneController.create_object(&mut scene, &mut ids, "Leaves", Some(tree)).unwrap();
+
+        let mut prefab = PrefabController.create_from_object(&scene, &mut ids, &tree, "Tree").unwrap();
+        let old_root = prefab.data().objects[0].clone();
+        let old_leaves = prefab.data().objects[1].clone();
+
+        let placed = PrefabController.instantiate(&prefab, &mut scene, &mut ids, None).unwrap();
+        let placed_leaves = query::find_object(&scene.data().objects, &placed).unwrap().children[0];
+
+        // Edit the instance: rename a child and add a new one.
+        SceneController.rename_object(&mut scene, &placed_leaves, "Branches").unwrap();
+        SceneController.create_object(&mut scene, &mut ids, "Fruit", Some(placed)).unwrap();
+
+        PrefabController.update_from_instance(&mut prefab, &scene, &mut ids, &placed).unwrap();
+
+        let objects = &prefab.data().objects;
+
+        assert_eq!(objects.len(), 3);
+        assert_eq!(objects[0].uuid, old_root.uuid);
+        assert_eq!(objects[0].components[0].id, old_root.components[0].id);
+        assert_eq!(objects[1].uuid, old_leaves.uuid);
+        assert_eq!(objects[1].name, "Branches");
+        assert_eq!(objects[2].name, "Fruit");
+        assert_ne!(objects[2].uuid, old_root.uuid);
+        assert_ne!(objects[2].uuid, old_leaves.uuid);
+        assert_eq!(objects[0].children, vec![old_leaves.uuid, objects[2].uuid]);
+        assert!(objects.iter().all(|object| object.prefab_source.is_none()));
+    }
+
+    #[test]
+    fn only_an_instance_of_the_prefab_can_update_it() {
+        let mut ids = IdRegistryModel::default();
+        let mut scene = SceneController.create_scene(&mut ids, "Test");
+        let tree = SceneController.create_object(&mut scene, &mut ids, "Tree", None).unwrap();
+        let mut prefab = PrefabController.create_from_object(&scene, &mut ids, &tree, "Tree").unwrap();
+
+        // `tree` was never marked as an instance of the prefab.
+        assert!(PrefabController.update_from_instance(&mut prefab, &scene, &mut ids, &tree).is_err());
     }
 }

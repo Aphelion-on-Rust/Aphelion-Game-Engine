@@ -38,6 +38,8 @@ impl HierarchyView {
             selected: ui.data().selected.contains(uuid),
             active: object.active,
             active_in_hierarchy: query::is_active_in_hierarchy(objects, uuid),
+            is_prefab_root: object.prefab_source.is_some(),
+            renaming: ui.data().renaming == Some(*uuid),
         });
 
         if expanded {

@@ -2,10 +2,10 @@ use super::commands::{action_to_command, apply_all, ControllerState, UiCommand};
 use super::dock_view::DockView;
 use super::models::EditorModels;
 use super::panels::PanelViews;
-use super::{input_bridge, menu_bar, theme_apply};
+use super::{input_bridge, menu_bar, prefab_flow, theme_apply};
 use crate::keybinds::query::triggered_actions;
 use crate::number_field::query::cursor_icon;
-use crate::number_field::{CursorIcon, DragPhase, NumberFieldController};
+use crate::number_field::{wrapped_x, CursorIcon, DragPhase, NumberFieldController};
 use crate::project_io;
 use crate::theme::query::active_theme;
 use crate::theme::ThemeData;
@@ -30,6 +30,10 @@ pub struct EditorApp {
     /// The scene as it is on disk. If the scene differs from it, there are unsaved changes.
     saved_scene: Option<SceneData>,
     last_title: String,
+    /// The "unsaved changes" question is showing.
+    close_prompt: bool,
+    /// The question was answered, the window may close now.
+    allow_close: bool,
 }
 
 impl EditorApp {
@@ -41,7 +45,14 @@ impl EditorApp {
             Some(root) => match project_io::open_project(&root) {
                 Ok(opened) => {
                     let saved = opened.scene.data().clone();
-                    let status = format!("Opened project {}", opened.data.name);
+                    let status = match opened.warnings.first() {
+                        Some(first) => format!(
+                            "Opened project {}, but {} file(s) could not be read: {first}",
+                            opened.data.name,
+                            opened.warnings.len()
+                        ),
+                        None => format!("Opened project {}", opened.data.name),
+                    };
 
                     (EditorModels::from_opened(opened), status, Some(saved))
                 }
@@ -68,6 +79,8 @@ impl EditorApp {
             pointer_hidden: false,
             saved_scene,
             last_title: String::new(),
+            close_prompt: false,
+            allow_close: false,
         }
     }
 
@@ -121,6 +134,53 @@ impl EditorApp {
         }
     }
 
+    /// Moves the pointer to the other side of the window when it reaches an edge,
+    /// so a long drag never runs out of room.
+    fn wrap_pointer(&self, ctx: &egui::Context) {
+        let Some(position) = ctx.input(|state| state.pointer.latest_pos()) else {
+            return;
+        };
+
+        if let Some(x) = wrapped_x(position.x, ctx.screen_rect().width(), 4.0) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CursorPosition(egui::pos2(x, position.y)));
+        }
+    }
+
+    /// "The scene has unsaved changes" with Save and close / Close without saving / Cancel.
+    fn show_close_prompt(&mut self, ctx: &egui::Context) {
+        egui::Window::new("Unsaved changes")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.label("The scene has changes that are not saved.");
+                ui.add_space(8.0);
+
+                ui.horizontal(|ui| {
+                    if ui.button("Save and close").clicked() {
+                        self.save_scene();
+                        self.close_prompt = false;
+
+                        // If saving failed the status bar says why, and the editor stays open.
+                        if !self.scene_is_dirty() {
+                            self.allow_close = true;
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        }
+                    }
+
+                    if ui.button("Close without saving").clicked() {
+                        self.allow_close = true;
+                        self.close_prompt = false;
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+
+                    if ui.button("Cancel").clicked() {
+                        self.close_prompt = false;
+                    }
+                });
+            });
+    }
+
     /// Shows the <-> cursor over number fields and hides the pointer while dragging.
     fn update_cursor(&mut self, ctx: &egui::Context) {
         let icon = cursor_icon(self.models.number_field.data());
@@ -128,6 +188,11 @@ impl EditorApp {
 
         if icon == CursorIcon::HorizontalResize {
             ctx.set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+        }
+
+        // While the pointer is hidden for a number drag, it wraps around the window edges.
+        if should_hide {
+            self.wrap_pointer(ctx);
         }
 
         if should_hide != self.pointer_hidden {
@@ -145,6 +210,12 @@ impl Default for EditorApp {
 
 impl eframe::App for EditorApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // 0. Closing the window with unsaved changes asks first.
+        if ctx.input(|state| state.viewport().close_requested()) && !self.allow_close && self.scene_is_dirty() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.close_prompt = true;
+        }
+
         // 1. Theme.
         let theme = active_theme(self.models.theme.data()).clone();
 
@@ -197,6 +268,10 @@ impl eframe::App for EditorApp {
             self.dock_view.show(ui, &self.models, &mut self.panel_views, &mut commands);
         });
 
+        if self.close_prompt {
+            self.show_close_prompt(ctx);
+        }
+
         // 4. If no number field reported a hover this frame, the pointer left them all.
         if !commands.iter().any(|command| matches!(command, UiCommand::NumberHover)) {
             NumberFieldController.hover_exit(&mut self.models.number_field);
@@ -205,10 +280,23 @@ impl eframe::App for EditorApp {
         // 5. Apply the commands through the controllers.
         apply_all(commands, &mut self.models, &mut self.state);
 
-        // 6. Saving the scene, the cursor, and the window title.
+        // 6. Saving the scene, prefab work that needs the disk, the cursor, and the window title.
         if self.state.save_requested {
             self.state.save_requested = false;
             self.save_scene();
+        }
+
+        let requests = std::mem::take(&mut self.state.pending_io);
+
+        if !requests.is_empty() {
+            let today = flux_core::clock::today();
+
+            for request in requests {
+                self.state.status = match prefab_flow::run(request, &mut self.models, &today) {
+                    Ok(message) => message,
+                    Err(error) => error.to_string(),
+                };
+            }
         }
 
         self.update_cursor(ctx);

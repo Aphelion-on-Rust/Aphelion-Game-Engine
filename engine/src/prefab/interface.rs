@@ -4,7 +4,7 @@ use crate::scene::GameObjectData;
 use serde::{Deserialize, Serialize};
 
 /// A saved branch of objects. `objects[0]` is always the root.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PrefabData {
     pub uuid: AssetUuid,
     pub name: String,

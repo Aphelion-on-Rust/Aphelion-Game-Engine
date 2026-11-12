@@ -204,7 +204,7 @@ mod tests {
         let script = IdController.new_uuid(&mut ids);
 
         SceneController
-            .add_component(&mut scene, &mut ids, &object, ComponentData::Script(ScriptData { script, enabled }))
+            .add_component(&mut scene, &mut ids, &object, ComponentData::Script(ScriptData::new(script, enabled)))
             .unwrap();
 
         (scene, ids, object)
