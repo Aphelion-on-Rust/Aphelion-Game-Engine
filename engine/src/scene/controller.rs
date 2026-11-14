@@ -66,31 +66,6 @@ impl SceneController {
         Ok(uuid)
     }
 
-    /// Makes a ready-made object (a cube, a camera, a light ...): a new object with its Transform
-    /// set up and the components of the preset.
-    pub fn create_from_preset(
-        &self,
-        scene: &mut SceneModel,
-        ids: &mut IdRegistryModel,
-        preset: super::presets::ObjectPreset,
-        parent: Option<AssetUuid>,
-    ) -> EngineResult<AssetUuid> {
-        let uuid = self.create_object(scene, ids, preset.name(), parent)?;
-        let transform_id = query::find_object(&scene.data().objects, &uuid)
-            .and_then(|object| object.components.first())
-            .map(|entry| entry.id)
-            .ok_or(EngineError::ObjectNotFound(uuid.to_string()))?;
-        let transform = preset.transform();
-
-        self.update_component(scene, &uuid, transform_id, |data| *data = ComponentData::Transform(transform))?;
-
-        for component in preset.components() {
-            self.add_component(scene, ids, &uuid, component)?;
-        }
-
-        Ok(uuid)
-    }
-
     pub fn add_component(
         &self,
         scene: &mut SceneModel,
@@ -344,23 +319,5 @@ mod tests {
 
         assert!(result.is_err());
         assert!(matches!(scene.data().objects[0].components[0].data, ComponentData::Transform(_)));
-    }
-
-    #[test]
-    fn a_preset_object_has_its_transform_and_components() {
-        use crate::scene::ObjectPreset;
-
-        let (controller, mut scene, mut ids) = setup();
-        let light = controller.create_from_preset(&mut scene, &mut ids, ObjectPreset::DirectionalLight, None).unwrap();
-        let object = query::find_object(&scene.data().objects, &light).unwrap();
-
-        assert_eq!(object.name, "Directional Light");
-        assert_eq!(object.components.len(), 2);
-        assert_eq!(object.components[1].data.type_name(), "LightSource");
-
-        match &object.components[0].data {
-            ComponentData::Transform(transform) => assert_eq!(transform.rotation.x, 50.0),
-            other => panic!("expected a transform, got {other:?}"),
-        }
     }
 }

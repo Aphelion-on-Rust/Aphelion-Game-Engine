@@ -13,7 +13,7 @@ use flux_engine::error::{EngineError, EngineResult};
 use flux_engine::identity::{AssetUuid, ComponentId};
 use flux_engine::inspect::{FieldPath, FieldValue, InspectController};
 use flux_engine::mivc::Model;
-use flux_engine::scene::{ComponentData, ObjectPreset, SceneController};
+use flux_engine::scene::{ComponentData, RectTransformData, SceneController, TransformData};
 
 #[derive(Clone, Debug)]
 pub enum UiCommand {
@@ -59,10 +59,6 @@ pub enum UiCommand {
     RemoveComponent { object: AssetUuid, component: ComponentId },
     /// Put a Transform or RectTransform back to its default values.
     ResetComponent { object: AssetUuid, component: ComponentId },
-    /// Make a ready-made object (cube, camera, light ...) from the Create menu.
-    CreatePreset { preset: ObjectPreset, parent: Option<AssetUuid> },
-    /// Add a component of this kind (`ViewCamera`, `LightSource` ...) to an object.
-    AddComponent { object: AssetUuid, kind: String },
     /// Set a field (or a value inside a struct or list) from the Eclipse Inspector.
     SetField { object: AssetUuid, component: ComponentId, path: FieldPath, value: FieldValue },
     /// Put a field back to its default.
@@ -94,8 +90,6 @@ impl UiCommand {
             }
             UiCommand::RemoveComponent { .. } => Some(("Remove component".to_string(), None)),
             UiCommand::ResetComponent { .. } => Some(("Reset component".to_string(), None)),
-            UiCommand::CreatePreset { .. } => Some(("Create object".to_string(), None)),
-            UiCommand::AddComponent { .. } => Some(("Add component".to_string(), None)),
             // Typing in one field is one step: steps for the same field are merged.
             UiCommand::SetField { object, component, path, .. } => Some((
                 "Change value".to_string(),
@@ -346,17 +340,11 @@ fn apply(command: UiCommand, models: &mut EditorModels, state: &mut ControllerSt
             SceneController.remove_component(&mut models.scene, &object, component)?;
         }
         UiCommand::ResetComponent { object, component } => {
-            SceneController.update_component(&mut models.scene, &object, component, |data| data.reset())?;
-        }
-
-        UiCommand::CreatePreset { preset, parent } => {
-            HierarchyController.create_preset(&mut models.scene, &mut models.ids, &mut models.hierarchy_ui, preset, parent)?;
-        }
-        UiCommand::AddComponent { object, kind } => {
-            let data = ComponentData::new_of_kind(&kind)
-                .ok_or_else(|| EngineError::InvalidOperation(format!("there is no component called \"{kind}\"")))?;
-
-            SceneController.add_component(&mut models.scene, &mut models.ids, &object, data)?;
+            SceneController.update_component(&mut models.scene, &object, component, |data| match data {
+                ComponentData::Transform(transform) => *transform = TransformData::default(),
+                ComponentData::RectTransform(rect) => *rect = RectTransformData::default(),
+                ComponentData::Script(_) => {}
+            })?;
         }
 
         // ----- fields (Eclipse Inspector) -----
@@ -871,43 +859,5 @@ mod tests {
         }
 
         assert_eq!(models.history.data().undo.len(), 1);
-    }
-
-    #[test]
-    fn presets_and_added_components_show_up_and_a_component_can_be_reset() {
-        let mut models = EditorModels::new_demo();
-        let mut state = ControllerState::default();
-        let fov = FieldPath::field("fov_degrees");
-        let read = |models: &EditorModels, object: AssetUuid, index: usize, path: &FieldPath| {
-            let found = models.scene.data().objects.iter().find(|candidate| candidate.uuid == object).unwrap();
-
-            flux_engine::inspect::query::read_field(&found.components[index].data, path)
-        };
-
-        apply_all(vec![UiCommand::CreatePreset { preset: ObjectPreset::Camera, parent: None }], &mut models, &mut state);
-
-        let camera = models.hierarchy_ui.data().selected[0];
-        let component = models.scene.data().objects.iter().find(|o| o.uuid == camera).unwrap().components[1].id;
-
-        assert_eq!(read(&models, camera, 1, &fov), Some(FieldValue::Float(60.0)));
-
-        apply_all(
-            vec![UiCommand::SetField { object: camera, component, path: fov.clone(), value: FieldValue::Float(500.0) }],
-            &mut models,
-            &mut state,
-        );
-        assert_eq!(read(&models, camera, 1, &fov), Some(FieldValue::Float(179.0))); // kept inside its range
-
-        apply_all(vec![UiCommand::ResetComponent { object: camera, component }], &mut models, &mut state);
-        assert_eq!(read(&models, camera, 1, &fov), Some(FieldValue::Float(60.0)));
-
-        let count = |models: &EditorModels| models.scene.data().objects.iter().find(|o| o.uuid == camera).unwrap().components.len();
-
-        apply_all(vec![UiCommand::AddComponent { object: camera, kind: "LightSource".to_string() }], &mut models, &mut state);
-        assert_eq!(count(&models), 3);
-
-        apply_all(vec![UiCommand::AddComponent { object: camera, kind: "Nonsense".to_string() }], &mut models, &mut state);
-        assert_eq!(count(&models), 3);
-        assert_ne!(state.status, "Ready");
     }
 }

@@ -126,11 +126,9 @@ fields:
 
 ## Built-in components
 
-Transform, RectTransform, ViewCamera, LightSource, MeshDraw and SpriteDraw are described in
-`inspect/builtin.rs`. Each field is written once (name, kind, attributes, how to get and set it) and the
-description, the reader and the writer are all made from that list. A new built-in component adds one list
-and one line in each of `builtin_schema`, `builtin_get` and `builtin_set`.
-(A derive macro that writes the list from the struct could come later.)
+Transform and RectTransform are described in `inspect/builtin.rs`, with `builtin_get` and
+`builtin_set` to read and write a field by name. A new built-in component adds one arm to each
+of the three functions there. (A derive macro that writes them from the struct could come later.)
 
 ## Layout
 

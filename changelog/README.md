@@ -38,7 +38,6 @@ Name the file `step-<number>-<short-name>.md` and add a row to the table below.
 
 | Step | Date | Summary |
 | ---- | ---- | ------- |
-| [7a](step-07a-render-components-and-frame.md) | 2026-11-12 | Render components and the draw list |
 | [6b](step-06b-eclipse-inspector-ui.md) | 2026-11-11 | Eclipse Inspector UI |
 | [6a](step-06a-inspector-fields.md) | 2026-11-11 | Field descriptions, attributes and script fields |
 | [4d](step-04d-editor-polish.md) | 2026-11-11 | Editor polish |

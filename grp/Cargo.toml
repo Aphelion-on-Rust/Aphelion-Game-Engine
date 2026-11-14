@@ -6,4 +6,3 @@ authors.workspace = true
 
 [dependencies]
 flux-engine = { path = "../engine" }
-glam.workspace = true
