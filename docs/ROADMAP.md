@@ -19,8 +19,9 @@ and a changelog entry (`changelog/`).
 - [x] 4d Editor polish: pointer wrap, hierarchy rename, reset / remove components, unsaved-changes question
 - [x] 6a Eclipse Inspector part 1: field kinds, attributes ([Range] ...), script field values and rules
 - [x] 6b Eclipse Inspector UI: every component drawn from its field descriptions
+- [x] 7a Render components (ViewCamera, LightSource, MeshDraw, SpriteDraw), Create menu, scene to draw list
 
-About 13 deliveries and 275 files so far.
+About 14 deliveries and 300 files so far.
 
 ## To do (estimates)
 
@@ -29,7 +30,9 @@ File counts include tests and docs. Treat every number as +/- 40%.
 
 | Step | What                                                                 | Deliveries | New files |
 | ---- | -------------------------------------------------------------------- | ---------- | --------- |
-| 7    | SGP renderer: window integration, 2D sprites, 3D meshes, materials, lights | 4    | 70        |
+| 7b   | Software renderer (meshes, lights) and the real Scene / Game views | 1 | 18 |
+| 7c   | Editor camera (orbit, pan, zoom), picking and selection, 2D sprites, materials | 1 | 18 |
+| 7d   | GPU backend that draws the same draw list                          | 1 | 15 |
 | 8    | Physics 2D + 3D: rigidbody, all colliders, joints, character controller, raycasts | 4 | 70   |
 | 9    | C# scripting host: load assemblies, bind the engine API, serialized fields | 3     | 45        |
 | 10   | Asset pipeline: FBX / humanoid, atlas (convert, trim), audio, importers | 3       | 50        |
@@ -40,9 +43,9 @@ File counts include tests and docs. Treat every number as +/- 40%.
 | 15   | Camera system (Cinemachine-like), mesh editing tool (ProBuilder-like) | 2         | 35        |
 | 16   | Input system UI, extensions, Windows build template                  | 3          | 45        |
 | 17   | Documentation pass                                                   | 2          | 25        |
-|      | **Total**                                                            | **about 35** | **about 500** |
+|      | **Total**                                                            | **about 34** | **about 480** |
 
-So roughly 35 more deliveries and 470 to 530 more files, about 780 files in the end.
+So roughly 34 more deliveries and 450 to 510 more files, about 780 files in the end.
 
 ## Where it can grow
 

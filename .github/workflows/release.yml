@@ -1,0 +1,43 @@
+# Publishes a release the launcher can install.
+# Push a tag like v1.0.0 (or v1.1.0-beta.1 for a pre-release) and this builds the editor
+# for Windows, zips it, writes the .sha256 file and attaches both to the GitHub release.
+# See docs/RELEASING.md.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build the editor
+        run: cargo build --release -p flux-editor
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          $name = "flux-aphelion-$version-windows-x64"
+          New-Item -ItemType Directory -Path $name | Out-Null
+          Copy-Item target/release/flux-editor.exe $name/
+          Compress-Archive -Path "$name/*" -DestinationPath "$name.zip"
+          $hash = (Get-FileHash "$name.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $name.zip" | Out-File -Encoding ascii "$name.zip.sha256"
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            flux-aphelion-*-windows-x64.zip
+            flux-aphelion-*-windows-x64.zip.sha256
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true

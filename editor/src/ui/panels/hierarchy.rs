@@ -4,6 +4,7 @@ use crate::ui::models::EditorModels;
 use eframe::egui;
 use flux_engine::identity::AssetUuid;
 use flux_engine::mivc::{Model, View};
+use flux_engine::scene::ObjectPreset;
 
 /// The text being typed while an object is renamed. Screen state, not data.
 #[derive(Default)]
@@ -25,9 +26,14 @@ pub fn show(
     let selected = models.hierarchy_ui.data().selected.first().copied();
 
     ui.horizontal(|ui| {
-        if ui.button("+ Create").clicked() {
-            commands.push(UiCommand::CreateObject { parent: selected });
-        }
+        ui.menu_button("+ Create", |ui| {
+            for preset in ObjectPreset::ALL {
+                if ui.button(preset.name()).clicked() {
+                    commands.push(UiCommand::CreatePreset { preset, parent: selected });
+                    ui.close_menu();
+                }
+            }
+        });
 
         if ui.button("Delete").clicked() {
             commands.push(UiCommand::DeleteSelected);

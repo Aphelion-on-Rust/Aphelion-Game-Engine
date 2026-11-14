@@ -1,3 +1,4 @@
+use crate::components::{LightData, MeshDrawData, SpriteDrawData, ViewCameraData};
 use crate::identity::{AssetUuid, ComponentId};
 use crate::inspect::FieldEntry;
 use crate::math::{Vec2, Vec3};
@@ -74,9 +75,54 @@ pub enum ComponentData {
     Transform(TransformData),
     RectTransform(RectTransformData),
     Script(ScriptData),
+    ViewCamera(ViewCameraData),
+    LightSource(LightData),
+    MeshDraw(MeshDrawData),
+    SpriteDraw(SpriteDrawData),
 }
 
 impl ComponentData {
+    /// The components a user can add from the Inspector. A Transform is always there already,
+    /// and a script needs a script asset.
+    pub const ADDABLE: &'static [&'static str] = &["ViewCamera", "LightSource", "MeshDraw", "SpriteDraw"];
+
+    /// A new component of the named kind with its default values.
+    pub fn new_of_kind(kind: &str) -> Option<ComponentData> {
+        match kind {
+            "ViewCamera" => Some(ComponentData::ViewCamera(ViewCameraData::default())),
+            "LightSource" => Some(ComponentData::LightSource(LightData::default())),
+            "MeshDraw" => Some(ComponentData::MeshDraw(MeshDrawData::default())),
+            "SpriteDraw" => Some(ComponentData::SpriteDraw(SpriteDrawData::default())),
+            _ => None,
+        }
+    }
+
+    /// The name of the kind, as used in YAML and in the Inspector.
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            ComponentData::Transform(_) => "Transform",
+            ComponentData::RectTransform(_) => "RectTransform",
+            ComponentData::Script(_) => "Script",
+            ComponentData::ViewCamera(_) => "ViewCamera",
+            ComponentData::LightSource(_) => "LightSource",
+            ComponentData::MeshDraw(_) => "MeshDraw",
+            ComponentData::SpriteDraw(_) => "SpriteDraw",
+        }
+    }
+
+    /// Puts every value back to its default. A script is left alone (its defaults come from its schema).
+    pub fn reset(&mut self) {
+        match self {
+            ComponentData::Transform(data) => *data = TransformData::default(),
+            ComponentData::RectTransform(data) => *data = RectTransformData::default(),
+            ComponentData::ViewCamera(data) => *data = ViewCameraData::default(),
+            ComponentData::LightSource(data) => *data = LightData::default(),
+            ComponentData::MeshDraw(data) => *data = MeshDrawData::default(),
+            ComponentData::SpriteDraw(data) => *data = SpriteDrawData::default(),
+            ComponentData::Script(_) => {}
+        }
+    }
+
     /// Transform and RectTransform control placement. An object has exactly one of them.
     pub fn is_placement(&self) -> bool {
         matches!(self, ComponentData::Transform(_) | ComponentData::RectTransform(_))
@@ -115,4 +161,32 @@ pub struct SceneData {
 impl Interface for SceneData {
     const FORMAT: &'static str = "scene";
     const VERSION: u32 = 1;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_addable_kind_can_be_made_and_names_itself() {
+        for kind in ComponentData::ADDABLE {
+            assert_eq!(ComponentData::new_of_kind(kind).unwrap().type_name(), *kind);
+        }
+
+        assert!(ComponentData::new_of_kind("Transform").is_none());
+        assert!(ComponentData::new_of_kind("Nonsense").is_none());
+    }
+
+    #[test]
+    fn reset_brings_back_the_defaults() {
+        let mut camera = ViewCameraData::default();
+
+        camera.fov_degrees = 90.0;
+
+        let mut data = ComponentData::ViewCamera(camera);
+
+        data.reset();
+
+        assert_eq!(data, ComponentData::ViewCamera(ViewCameraData::default()));
+    }
 }

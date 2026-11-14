@@ -2,7 +2,7 @@ use super::model::HierarchyUiModel;
 use flux_engine::error::{EngineError, EngineResult};
 use flux_engine::identity::{AssetUuid, IdRegistryModel};
 use flux_engine::mivc::{Controller, Model};
-use flux_engine::scene::{query, SceneController, SceneModel};
+use flux_engine::scene::{query, ObjectPreset, SceneController, SceneModel};
 
 pub struct HierarchyController;
 
@@ -87,6 +87,25 @@ impl HierarchyController {
         parent: Option<AssetUuid>,
     ) -> EngineResult<AssetUuid> {
         let uuid = SceneController.create_object(scene, ids, name, parent)?;
+
+        if let Some(parent_uuid) = parent {
+            self.write(ui).expanded.insert(parent_uuid);
+        }
+
+        self.select_only(ui, uuid);
+        Ok(uuid)
+    }
+
+    /// Makes a ready-made object (cube, camera, light ...), selects it, and opens its parent.
+    pub fn create_preset(
+        &self,
+        scene: &mut SceneModel,
+        ids: &mut IdRegistryModel,
+        ui: &mut HierarchyUiModel,
+        preset: ObjectPreset,
+        parent: Option<AssetUuid>,
+    ) -> EngineResult<AssetUuid> {
+        let uuid = SceneController.create_from_preset(scene, ids, preset, parent)?;
 
         if let Some(parent_uuid) = parent {
             self.write(ui).expanded.insert(parent_uuid);
