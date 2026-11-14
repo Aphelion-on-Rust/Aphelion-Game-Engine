@@ -8,12 +8,13 @@ Run it with `cargo run -p flux-editor`.
   The highlight shows where it will land. Escape cancels.
 - Drag the dividers between panels. Click the small x on a tab to close it.
 - Window menu: open a closed panel, reset the layout. Theme menu: switch Dark / Light.
-- Hierarchy: click, Ctrl+click, double-click or F2 to rename in place (Enter accepts, Escape cancels),
+- Hierarchy: **+ Create** makes a cube, sphere, camera, light, sprite ... (see `docs/RENDERING.md`). Click, Ctrl+click, double-click or F2 to rename in place (Enter accepts, Escape cancels),
   arrows to open, right-click menu, drag a row onto another row
   to make it a child, drop in the empty area to move it to the top level.
 - Inspector (the Eclipse Inspector): edit the name, the active switch, and the fields of every
   component. The widgets are drawn from the description of each field (sliders for [Range],
   foldout groups, lists, structs, enums, colors, object pickers), see `docs/INSPECTOR.md`.
+  Add Component (bottom) adds a ViewCamera, LightSource, MeshDraw or SpriteDraw.
   Right-click a field name to reset it. Each component has Reset (Transform, RectTransform) or Remove (anything else).
   Hover a number: <-> cursor. Drag it: the pointer hides and the value slides.
   Shift = fine, Ctrl = coarse, Escape = cancel. At the window edge the hidden pointer wraps to

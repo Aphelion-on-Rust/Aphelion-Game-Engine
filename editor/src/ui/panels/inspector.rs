@@ -48,6 +48,16 @@ pub fn show(ui: &mut egui::Ui, models: &EditorModels, commands: &mut Vec<UiComma
         for entry in &object.components {
             ui.push_id(entry.id.value(), |ui| component_section(ui, models, objects, object, entry, commands));
         }
+
+        ui.add_space(8.0);
+        ui.menu_button("Add Component", |ui| {
+            for kind in ComponentData::ADDABLE {
+                if ui.button(*kind).clicked() {
+                    commands.push(UiCommand::AddComponent { object: selected, kind: kind.to_string() });
+                    ui.close_menu();
+                }
+            }
+        });
     });
 }
 
@@ -59,11 +69,7 @@ fn component_section(
     entry: &ComponentEntry,
     commands: &mut Vec<UiCommand>,
 ) {
-    let kind = match &entry.data {
-        ComponentData::Transform(_) => "Transform",
-        ComponentData::RectTransform(_) => "RectTransform",
-        ComponentData::Script(_) => "Script",
-    };
+    let kind = entry.data.type_name();
     let uuid: AssetUuid = object.uuid;
 
     egui::CollapsingHeader::new(format!("{kind}  (id {})", entry.id.value()))
