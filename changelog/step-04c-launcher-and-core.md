@@ -1,0 +1,48 @@
+# Step 4c - Launcher and shared core
+
+Date: 2026-11-10 | Status: not compiled yet
+
+## feat
+- **launcher:** new separate app (`/launcher`, `cargo run -p flux-launcher`) with its own window.
+- **launcher:** reads the releases of a GitHub repository, picks the file for the platform,
+  downloads it with progress, verifies the SHA-256 (when the release has a `.sha256` file),
+  unpacks it safely and installs it in `<install folder>/versions/<version>`.
+- **launcher:** version selection: default version, a version per project, install, uninstall
+  (only inside the versions folder), pre-release toggle, "new version available" banner.
+- **launcher:** "Install & Open": opening a project whose engine version is missing installs it
+  first, then starts the editor.
+- **launcher:** project list (name, folder, engine version, last opened).
+- **launcher:** settings (GitHub owner/repo, install folder, update check) and an offline
+  cache of the release list.
+- **core:** `SettingsStore::for_app(name)`, one place that knows the settings folder.
+- **editor:** accepts `--project <folder>` (shown in the window title for now).
+- **workspace:** GitHub Actions workflow that builds the Windows editor on a version tag and
+  attaches `flux-aphelion-<version>-windows-x64.zip` and its `.sha256`.
+
+## refactor
+- **core:** new crate `flux-core` holding the MIVC base, errors and YAML storage, moved out of
+  the engine so small apps don't need the whole engine.
+- **engine:** re-exports `flux_core::{error, mivc, storage}`, so existing paths such as
+  `flux_engine::mivc::Store` and `crate::mivc::...` keep working.
+- **core:** `ReadOnly` for views now accepts up to four models.
+- **editor:** the settings store moved to `flux-core` (same folder as before).
+
+## test
+- **launcher:** version ordering and parsing, GitHub release parsing, checksum, zip-slip and
+  single-folder detection, date conversion, install/uninstall/launch command flows,
+  jobs, installs, projects, settings, the view rows.
+- **core:** YAML tests use their own sample type. **engine:** the id registry YAML test moved to `identity`.
+
+## docs
+- `docs/LAUNCHER.md`, `docs/RELEASING.md`, this changelog folder.
+- `docs/PROGRESS.md` is gone, its content lives in the version files here.
+
+## chore
+- **workspace:** added `core` and `launcher` to the workspace.
+
+## Known issues
+- The default repository `atropinex/flux-aphelion` is a guess. Change it in launcher Settings.
+- No cancel button for downloads. Project and install folders are typed, there is no folder picker.
+- Unpacking does not keep Unix executable permissions (Windows first).
+- The launcher uses egui's default look, not the editor themes.
+- The network and zip code can only be checked by running it. Everything else is covered by tests.

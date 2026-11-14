@@ -1,0 +1,38 @@
+# Step 5a - Projects
+
+Date: 2026-11-10 | Status: not compiled yet
+
+## feat
+- **core:** `project` module: `project.yaml` data, folder layout, name rules, creating / loading /
+  saving a project folder. Shared by the launcher (creates) and the editor (opens).
+- **core:** `GraphicsPipeline` (SGP = Simple, HGP = Heavy). The pipeline and Aphelion's Control are
+  chosen at creation and there is no function that changes them afterwards.
+- **launcher:** create a new project (name, folder, engine version, pipeline, Aphelion's Control),
+  add an existing project (reads its `project.yaml`), changing a project's version also rewrites
+  the project's file.
+- **editor:** opens the project given with `--project` (scene, id registry), creates a "Main" scene
+  when there is none, Ctrl+S / File > Save Scene, `*` in the title and a status bar note for
+  unsaved changes, a real Project panel.
+- **engine:** `IdController::ensure_uuid` / `ensure_component_id` (ids read from files) and
+  `find_duplicate_ids` (a scene file that repeats an id is refused).
+- **core:** `save_yaml` writes to a temp file and renames it, so a crash can't leave half a file.
+
+## refactor
+- **editor:** the editor starts with a demo scene only when no project is given.
+- **engine:** `SceneData` can be compared (`PartialEq`), used for the unsaved-changes marker.
+
+## test
+- **core:** project names, creation, folder layout, Aphelion folder only when chosen, safe saving.
+- **editor:** opening an empty project, save and reopen with ids, repeated ids refused.
+- **launcher:** create / refuse / default version / version rewrite / import flows.
+- **engine:** ensure ids, duplicate ids.
+
+## docs
+- `docs/PROJECT_FORMAT.md`, updates to `docs/LAUNCHER.md` and `docs/EDITOR_UI.md`.
+- `docs/ROADMAP.md` now has an estimate of the remaining work.
+
+## Known issues
+- No question about unsaved changes when closing the editor.
+- Only the first scene file of a project is opened. Several scenes come with scene switching.
+- The `.aphelion` folder is created but empty until Aphelion's Control is built (step 5c).
+- A lost `Library/id_registry.yaml` forgets ids of objects that were already deleted.

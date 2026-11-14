@@ -1,0 +1,18 @@
+# Step 1 - Foundation
+
+Date: 2026-11-09 | Status: not compiled yet
+
+## feat
+- **workspace:** Cargo workspace with `engine`, `editor`, `scripting`, `grp`, `extensions`
+  (atropinex as author in the root `Cargo.toml` only, not in the engine).
+- **engine:** MIVC base: `Interface`, `Model` / `Store`, `View`, `Controller`. Only controllers
+  can change a model (a `WriteToken` only they can create).
+- **engine:** ids: `AssetUuid` (never changes, never repeats) and `ComponentId` (from 10000),
+  `IdController` refuses duplicates.
+- **engine:** YAML storage with a `format` / `version` / `data` header, wrong or newer files rejected.
+
+## test
+- **engine:** unique uuids, component ids from 10000, duplicate refusal, YAML round trip.
+
+## docs
+- `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`.
