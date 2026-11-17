@@ -1,11 +1,11 @@
 # Rendering
 
-The renderer is built in steps. Step 7a (done) is everything that happens **before** a pixel is drawn.
+The renderer is built in steps. Step 7a is everything that happens **before** a pixel is drawn, step 7b draws it on the CPU.
 
 | Step | What                                                                              |
 | ---- | --------------------------------------------------------------------------------- |
-| 7a   | Rendering components, ready-made objects, the maths that turns a scene into a draw list |
-| 7b   | A software renderer (runs on the CPU, no GPU needed) and the real Scene / Game views |
+| 7a   | Rendering components, ready-made objects, the maths that turns a scene into a draw list (done) |
+| 7b   | A software renderer (runs on the CPU, no GPU needed) and the real Scene / Game views (done) |
 | 7c   | The editor camera (orbit, pan, zoom), picking and selection, 2D sprites, materials |
 | 7d   | A GPU backend that draws the same draw list                                       |
 
@@ -35,6 +35,28 @@ for Orthographic, a Directional light has no *Range*, only a Spot light has a *S
 Empty, Cube, Sphere, Plane, Cylinder, Capsule, Camera, Directional Light, Point Light, Spot Light, Sprite.
 The camera starts pulled back at (0, 1, -10), the directional light tilted (50, -30, 0), the point and
 spot lights above the middle.
+
+## The software renderer (`grp/src/software`)
+
+`render(frame, width, height)` draws a `RenderFrame` into an `Image` (red, green, blue, alpha bytes).
+It implements the `RenderBackend` trait, which the GPU renderer (7d) will implement too.
+
+- **Meshes:** transformed by the camera, cut at the near plane, faces pointing away from the camera are skipped,
+  the nearest surface wins (depth buffer), colors and normals are interpolated with perspective correction.
+- **Lighting:** a lit mesh is its color times (ambient light + every light). Directional lights shine everywhere,
+  point lights fade out smoothly to their range, spot lights add a cone. There are no shadows yet (the shadow
+  switches are stored for later). *Unlit* meshes show their color as it is. No gamma correction.
+- **Sprites:** drawn after the meshes, in order (a higher order on top), flat colored, hidden by meshes in front.
+- **Shapes** (`mesh.rs`): Cube 1 x 1 x 1, Sphere diameter 1, Plane 10 x 10 facing up, Cylinder radius 0.5 and height 2,
+  Capsule radius 0.5 and height 2. All centered on their object.
+
+### In the editor
+
+The **Game** view draws the scene from its camera (the ViewCamera with the highest priority, and a note if
+there is none). The **Scene** view uses a built-in camera for now, orbit / pan / zoom come in 7c.
+The picture is drawn again only when the scene or the panel size changes, and never wider than 640 pixels
+(it is stretched). Drawing on the CPU is slow in a debug build: use `cargo run --release -p flux-editor`.
+The demo scene has a ground, a crate and a ball so there is something to see.
 
 ## From scene to draw list (`grp/src/frame`)
 

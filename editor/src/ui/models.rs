@@ -14,8 +14,9 @@ use flux_engine::inspect::{
 };
 use flux_engine::identity::{IdController, IdRegistryModel};
 use flux_engine::input::InputModel;
-use flux_engine::mivc::Store;
-use flux_engine::scene::{ComponentData, SceneController, SceneModel, ScriptData};
+use flux_engine::math::{Rgba, Vec3};
+use flux_engine::mivc::{Model, Store};
+use flux_engine::scene::{query, ComponentData, ObjectPreset, SceneController, SceneModel, ScriptData};
 use std::path::PathBuf;
 
 /// The project that is open: where it is, and its `project.yaml`.
@@ -48,6 +49,32 @@ pub struct EditorModels {
 }
 
 const DEMO_ERROR: &str = "building the demo scene can't fail";
+
+/// A ready-made shape with a name, a position and a color, for the demo scene.
+fn demo_shape(scene: &mut SceneModel, ids: &mut IdRegistryModel, preset: ObjectPreset, name: &str, position: Vec3, color: Rgba) {
+    let object = SceneController.create_from_preset(scene, ids, preset, None).expect(DEMO_ERROR);
+    let (transform, mesh) = {
+        let found = query::find_object(&scene.data().objects, &object).expect(DEMO_ERROR);
+
+        (found.components[0].id, found.components[1].id)
+    };
+
+    SceneController.rename_object(scene, &object, name).expect(DEMO_ERROR);
+    SceneController
+        .update_component(scene, &object, transform, |data| {
+            if let ComponentData::Transform(placement) = data {
+                placement.position = position;
+            }
+        })
+        .expect(DEMO_ERROR);
+    SceneController
+        .update_component(scene, &object, mesh, |data| {
+            if let ComponentData::MeshDraw(draw) = data {
+                draw.color = color;
+            }
+        })
+        .expect(DEMO_ERROR);
+}
 
 fn field(name: &str, kind: FieldKind, attributes: Vec<FieldAttribute>) -> FieldDescriptor {
     FieldDescriptor { name: name.to_string(), kind, default: None, attributes }
@@ -118,8 +145,11 @@ impl EditorModels {
             SceneController.create_object(scene, ids, name, parent).expect(DEMO_ERROR)
         };
 
-        new_object(&mut scene, &mut ids, "Main Camera", None);
-        new_object(&mut scene, &mut ids, "Directional Light", None);
+        let camera = SceneController.create_from_preset(&mut scene, &mut ids, ObjectPreset::Camera, None).expect(DEMO_ERROR);
+        let sun = SceneController.create_from_preset(&mut scene, &mut ids, ObjectPreset::DirectionalLight, None).expect(DEMO_ERROR);
+
+        SceneController.rename_object(&mut scene, &camera, "Main Camera").expect(DEMO_ERROR);
+        SceneController.rename_object(&mut scene, &sun, "Directional Light").expect(DEMO_ERROR);
 
         let player = new_object(&mut scene, &mut ids, "Player", None);
         new_object(&mut scene, &mut ids, "Body", Some(player));
@@ -134,6 +164,10 @@ impl EditorModels {
         InspectController.sync_script_fields(&mut scene, &schemas, &player, component).expect(DEMO_ERROR);
 
         HierarchyController.toggle_expanded(&mut hierarchy_ui, player);
+
+        demo_shape(&mut scene, &mut ids, ObjectPreset::Plane, "Ground", Vec3::ZERO, Rgba::new(0.35, 0.40, 0.35, 1.0));
+        demo_shape(&mut scene, &mut ids, ObjectPreset::Cube, "Crate", Vec3::new(-2.0, 0.5, 0.0), Rgba::new(0.80, 0.45, 0.25, 1.0));
+        demo_shape(&mut scene, &mut ids, ObjectPreset::Sphere, "Ball", Vec3::new(2.0, 0.5, 0.0), Rgba::new(0.30, 0.50, 0.85, 1.0));
 
         Self {
             project: None,

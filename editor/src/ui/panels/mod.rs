@@ -6,6 +6,7 @@ pub mod history;
 pub mod inspector;
 pub mod placeholder;
 pub mod project;
+pub mod viewport;
 
 use super::commands::UiCommand;
 use super::models::EditorModels;
@@ -54,6 +55,8 @@ pub struct PanelViews {
     pub rename: hierarchy::RenameBuffer,
     pub history: HistoryView,
     pub control: ControlView,
+    pub scene_view: viewport::ViewCache,
+    pub game_view: viewport::ViewCache,
 }
 
 pub fn show_panel(
@@ -67,6 +70,8 @@ pub fn show_panel(
         PanelKind::Hierarchy => hierarchy::show(ui, &mut views.hierarchy, &mut views.rename, models, commands),
         PanelKind::Inspector => inspector::show(ui, models, commands),
         PanelKind::Project => project::show(ui, models, commands),
+        PanelKind::Scene => viewport::show(ui, &mut views.scene_view, viewport::ViewKind::Scene, models),
+        PanelKind::Game => viewport::show(ui, &mut views.game_view, viewport::ViewKind::Game, models),
         PanelKind::Control => control::show(ui, &mut views.control, models, commands),
         PanelKind::History => history::show(ui, &mut views.history, models, commands),
         other => placeholder::show(ui, other),

@@ -1,7 +1,8 @@
 # Roadmap
 
 Heavy steps are done one at a time. Easy steps are grouped. After each step you get a new zip
-and a changelog entry (`changelog/`).
+(named `aphelion-engine-v0.<minor>.<patch>-alpha`, patch 0 to 12, then the minor goes up) and a new section in
+`changelog/CHANGELOG.md`.
 
 ## Done
 
@@ -20,8 +21,9 @@ and a changelog entry (`changelog/`).
 - [x] 6a Eclipse Inspector part 1: field kinds, attributes ([Range] ...), script field values and rules
 - [x] 6b Eclipse Inspector UI: every component drawn from its field descriptions
 - [x] 7a Render components (ViewCamera, LightSource, MeshDraw, SpriteDraw), Create menu, scene to draw list
+- [x] 7b Software renderer (meshes, lights, sprites) and the real Scene / Game views
 
-About 14 deliveries and 300 files so far.
+About 15 steps and 325 files so far (delivery v0.1.0-alpha).
 
 ## To do (estimates)
 
@@ -30,7 +32,6 @@ File counts include tests and docs. Treat every number as +/- 40%.
 
 | Step | What                                                                 | Deliveries | New files |
 | ---- | -------------------------------------------------------------------- | ---------- | --------- |
-| 7b   | Software renderer (meshes, lights) and the real Scene / Game views | 1 | 18 |
 | 7c   | Editor camera (orbit, pan, zoom), picking and selection, 2D sprites, materials | 1 | 18 |
 | 7d   | GPU backend that draws the same draw list                          | 1 | 15 |
 | 8    | Physics 2D + 3D: rigidbody, all colliders, joints, character controller, raycasts | 4 | 70   |
@@ -43,9 +44,9 @@ File counts include tests and docs. Treat every number as +/- 40%.
 | 15   | Camera system (Cinemachine-like), mesh editing tool (ProBuilder-like) | 2         | 35        |
 | 16   | Input system UI, extensions, Windows build template                  | 3          | 45        |
 | 17   | Documentation pass                                                   | 2          | 25        |
-|      | **Total**                                                            | **about 34** | **about 480** |
+|      | **Total**                                                            | **about 33** | **about 460** |
 
-So roughly 34 more deliveries and 450 to 510 more files, about 780 files in the end.
+So roughly 33 more steps and 430 to 490 more files, about 790 files in the end.
 
 ## Where it can grow
 
