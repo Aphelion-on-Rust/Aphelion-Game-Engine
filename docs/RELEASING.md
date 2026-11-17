@@ -4,14 +4,15 @@ The launcher installs whatever the GitHub **Releases** of the repository offer.
 
 ## Steps
 
-1. Set the version in the root `Cargo.toml` (`[workspace.package] version`). It is 1.0.0 now and
-   only changes when you decide to publish a new release. Add the changelog entry in `changelog/`.
+1. Set the version in the root `Cargo.toml` (`[workspace.package] version`) to the version of the delivery
+   (`0.1.0-alpha`, then `0.1.1-alpha` ... see `changelog/CHANGELOG.md` for how they count).
+   Add the new section to `changelog/CHANGELOG.md`.
 2. Tag and push:
    ```
-   git tag v1.0.0
-   git push origin v1.0.0
+   git tag v0.1.0-alpha
+   git push origin v0.1.0-alpha
    ```
-   For a beta use a tag like `v1.1.0-beta.1`, it is marked as a pre-release automatically.
+   For a beta use a tag like `v0.2.0-beta.1`, it is marked as a pre-release automatically.
 3. `.github/workflows/release.yml` builds the Windows editor and attaches the files below.
 
 ## What the launcher expects in a release

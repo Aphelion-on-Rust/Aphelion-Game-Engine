@@ -1,5 +1,5 @@
 # Publishes a release the launcher can install.
-# Push a tag like v1.0.0 (or v1.1.0-beta.1 for a pre-release) and this builds the editor
+# Push a tag like v0.1.0-alpha (or v0.2.0-beta.1 for a pre-release) and this builds the editor
 # for Windows, zips it, writes the .sha256 file and attaches both to the GitHub release.
 # See docs/RELEASING.md.
 

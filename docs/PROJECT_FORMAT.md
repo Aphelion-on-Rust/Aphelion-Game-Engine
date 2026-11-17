@@ -24,7 +24,7 @@ format: project
 version: 1
 data:
   name: Space Game
-  engine_version: 1.0.0
+  engine_version: 0.1.0-alpha
   pipeline: hgp            # sgp = Simple Graphics Pipeline, hgp = Heavy Graphics Pipeline
   aphelion_control: true
   created_on: 2026-11-10
