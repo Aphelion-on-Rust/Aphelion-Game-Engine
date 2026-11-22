@@ -10,6 +10,7 @@ MyGame/
   Assets/
     Scenes/               <name>.scene.yaml
     Prefabs/              <name>.prefab.yaml
+    ...                   any other files, pictures get a `<file>.meta.yaml` with their uuid (docs/ASSETS.md)
     Scripts/              (C# scripts arrive with the scripting step)
   Settings/
   Library/                id_registry.yaml (and later caches). Safe to ignore in git.

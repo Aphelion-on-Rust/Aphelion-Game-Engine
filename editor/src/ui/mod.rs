@@ -10,6 +10,7 @@
 //! One frame: read input -> draw (collect commands) -> apply commands -> set cursor -> save settings.
 
 pub mod app;
+pub mod asset_flow;
 pub mod commands;
 pub mod dock_view;
 pub mod field;

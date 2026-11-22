@@ -25,7 +25,7 @@ fn invalid(message: &str) -> EngineError {
     EngineError::InvalidOperation(message.to_string())
 }
 
-fn project_root(models: &EditorModels) -> EngineResult<PathBuf> {
+pub(super) fn project_root(models: &EditorModels) -> EngineResult<PathBuf> {
     models.project.as_ref().map(|project| project.root.clone()).ok_or_else(|| invalid("No project is open."))
 }
 
@@ -44,6 +44,8 @@ pub fn run(request: IoRequest, models: &mut EditorModels, today: &str) -> Engine
         IoRequest::ApplyToPrefab => apply_to_prefab(models, today),
         IoRequest::PlacePrefab { file } => place_prefab(models, &file),
         IoRequest::RevertRevision { prefab, number } => revert_revision(models, &prefab, number, today),
+        IoRequest::RefreshAssets => super::asset_flow::refresh(models),
+        IoRequest::SetTextureFilter { asset, filter } => super::asset_flow::set_texture_filter(models, &asset, filter),
     }
 }
 

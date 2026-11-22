@@ -80,3 +80,14 @@ pub fn script_schemas_folder(root: &Path) -> PathBuf {
 pub fn script_schema_file(root: &Path, script_uuid: &str) -> PathBuf {
     script_schemas_folder(root).join(format!("{script_uuid}.yaml"))
 }
+
+/// Every asset file has a small `<file>.meta.yaml` next to it. It holds the asset's uuid, which never changes.
+pub const ASSET_META_SUFFIX: &str = ".meta.yaml";
+
+/// `Assets/Art/Hero.png` -> `Assets/Art/Hero.png.meta.yaml`
+pub fn meta_file(asset_file: &Path) -> PathBuf {
+    let mut name = asset_file.as_os_str().to_owned();
+
+    name.push(ASSET_META_SUFFIX);
+    PathBuf::from(name)
+}

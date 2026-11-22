@@ -11,6 +11,7 @@
 //!
 //! Every folder uses the same MIVC files: interface, model, controller, (view, query).
 
+pub mod assets_io;
 pub mod hierarchy;
 pub mod history;
 pub mod keybinds;

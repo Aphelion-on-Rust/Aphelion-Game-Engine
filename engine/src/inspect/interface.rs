@@ -18,6 +18,8 @@ pub enum FieldKind {
     Enum { options: Vec<String> },
     /// A reference to another object in the scene.
     ObjectRef,
+    /// A reference to an asset file by its uuid. `asset` is the kind of asset, like "Texture".
+    AssetRef { asset: String },
     /// A list. Every element has the same kind.
     List { element: Box<FieldKind> },
     /// A group of named fields: a [Serializable] class or struct.
@@ -81,6 +83,7 @@ pub enum FieldValue {
     Color(Rgba),
     Enum(String),
     ObjectRef(Option<AssetUuid>),
+    AssetRef(Option<AssetUuid>),
     List(Vec<FieldValue>),
     Struct(Vec<FieldEntry>),
 }

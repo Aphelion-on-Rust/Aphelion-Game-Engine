@@ -3,20 +3,22 @@
 //! height 2, Capsule radius 0.5 and height 2. All are centered on the origin.
 
 use flux_engine::components::PrimitiveMesh;
-use glam::Vec3;
+use glam::{Vec2, Vec3};
 use std::f32::consts::PI;
 use std::sync::OnceLock;
 
 pub struct Mesh {
     pub positions: Vec<Vec3>,
     pub normals: Vec<Vec3>,
+    /// Where each point is on the texture, from (0, 0) at the bottom left to (1, 1) at the top right.
+    pub uvs: Vec<Vec2>,
     /// Three indices per triangle. The winding does not matter, culling uses the normals.
     pub indices: Vec<u32>,
 }
 
 impl Mesh {
     fn empty() -> Self {
-        Self { positions: Vec::new(), normals: Vec::new(), indices: Vec::new() }
+        Self { positions: Vec::new(), normals: Vec::new(), uvs: Vec::new(), indices: Vec::new() }
     }
 
     /// Adds four corners and the two triangles between them.
@@ -27,6 +29,8 @@ impl Mesh {
             self.positions.push(corner);
             self.normals.push(normal);
         }
+
+        self.uvs.extend([Vec2::new(0.0, 0.0), Vec2::new(1.0, 0.0), Vec2::new(1.0, 1.0), Vec2::new(0.0, 1.0)]);
 
         self.indices.extend([first, first + 1, first + 2, first, first + 2, first + 3]);
     }
@@ -72,13 +76,14 @@ fn plane() -> Mesh {
 fn lathe(rings: &[(f32, f32)], radius: f32, segments: usize) -> Mesh {
     let mut mesh = Mesh::empty();
 
-    for &(theta, offset) in rings {
+    for (ring_index, &(theta, offset)) in rings.iter().enumerate() {
         for segment in 0..=segments {
             let phi = 2.0 * PI * segment as f32 / segments as f32;
             let normal = Vec3::new(theta.sin() * phi.cos(), theta.cos(), theta.sin() * phi.sin());
 
             mesh.positions.push(normal * radius + Vec3::new(0.0, offset, 0.0));
             mesh.normals.push(normal);
+            mesh.uvs.push(Vec2::new(segment as f32 / segments as f32, ring_index as f32 / (rings.len() - 1) as f32));
         }
     }
 
@@ -130,6 +135,10 @@ fn cylinder() -> Mesh {
 
         mesh.positions.extend([bottom_a, bottom_b, top_b, top_a]);
         mesh.normals.extend([normal_a, normal_b, normal_b, normal_a]);
+
+        let (left, right) = (segment as f32 / segments as f32, (segment + 1) as f32 / segments as f32);
+
+        mesh.uvs.extend([Vec2::new(left, 0.0), Vec2::new(right, 0.0), Vec2::new(right, 1.0), Vec2::new(left, 1.0)]);
         mesh.indices.extend([first, first + 1, first + 2, first, first + 2, first + 3]);
     }
 
@@ -139,10 +148,14 @@ fn cylinder() -> Mesh {
 
         mesh.positions.push(Vec3::new(0.0, y, 0.0));
         mesh.normals.push(normal);
+        mesh.uvs.push(Vec2::new(0.5, 0.5));
 
         for segment in 0..=segments {
-            mesh.positions.push(point(segment, y).0);
+            let edge = point(segment, y).0;
+
+            mesh.positions.push(edge);
             mesh.normals.push(normal);
+            mesh.uvs.push(Vec2::new(0.5 + edge.x, 0.5 + edge.z));
         }
 
         for segment in 0..segments as u32 {
@@ -183,6 +196,8 @@ mod tests {
             assert!(!mesh.indices.is_empty(), "{kind:?} has no triangles");
             assert_eq!(mesh.indices.len() % 3, 0);
             assert_eq!(mesh.positions.len(), mesh.normals.len());
+            assert_eq!(mesh.positions.len(), mesh.uvs.len(), "{kind:?} has no uv for some points");
+            assert!(mesh.uvs.iter().all(|uv| (0.0..=1.0).contains(&uv.x) && (0.0..=1.0).contains(&uv.y)), "{kind:?} has a uv outside the texture");
             assert!(mesh.indices.iter().all(|&index| (index as usize) < mesh.positions.len()));
             assert!(mesh.normals.iter().all(|normal| (normal.length() - 1.0).abs() < 1e-4), "{kind:?} has a bad normal");
         }

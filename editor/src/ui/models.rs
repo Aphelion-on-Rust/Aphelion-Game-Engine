@@ -8,6 +8,7 @@ use crate::number_field::NumberFieldModel;
 use crate::theme::ThemeModel;
 use crate::project_io::OpenedProject;
 use flux_core::project::ProjectModel;
+use flux_engine::assets::AssetLibraryModel;
 use flux_engine::control::ControlModel;
 use flux_engine::inspect::{
     FieldAttribute, FieldDescriptor, FieldKind, FieldValue, InspectController, SchemaLibraryData, SchemaLibraryModel,
@@ -43,6 +44,8 @@ pub struct EditorModels {
     pub library: PrefabLibraryModel,
     /// The camera of the Scene view.
     pub scene_camera: SceneCameraModel,
+    /// The asset files (pictures) of the open project.
+    pub assets: AssetLibraryModel,
     /// Aphelion's Control: prefab histories (empty if the project has none).
     pub control: ControlModel,
     /// The fields of every script, for the Inspector.
@@ -183,6 +186,7 @@ impl EditorModels {
             history: HistoryModel::default(),
             library: PrefabLibraryModel::default(),
             scene_camera: SceneCameraModel::default(),
+            assets: AssetLibraryModel::default(),
             control: ControlModel::default(),
             schemas,
             number_field: NumberFieldModel::default(),
@@ -207,6 +211,7 @@ impl EditorModels {
             history: HistoryModel::default(),
             library: opened.library,
             scene_camera: SceneCameraModel::default(),
+            assets: opened.assets,
             control: opened.control,
             schemas: opened.schemas,
             number_field: NumberFieldModel::default(),

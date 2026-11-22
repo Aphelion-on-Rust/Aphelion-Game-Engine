@@ -11,3 +11,4 @@ flux-grp = { path = "../grp" }
 serde.workspace = true
 serde_yaml.workspace = true
 eframe.workspace = true
+image.workspace = true

@@ -11,6 +11,7 @@ use crate::number_field::{DragPhase, DragSpeed, NumberFieldConfig, NumberFieldCo
 use crate::scene_view::query::render_camera;
 use crate::scene_view::SceneCameraController;
 use crate::theme::ThemeController;
+use flux_engine::assets::TextureFilter;
 use flux_engine::error::{EngineError, EngineResult};
 use flux_engine::identity::{AssetUuid, ComponentId};
 use flux_engine::inspect::{FieldPath, FieldValue, InspectController};
@@ -49,6 +50,10 @@ pub enum UiCommand {
     ApplyToPrefab,
     PlacePrefab { file: String },
     RevertRevision { prefab: AssetUuid, number: u32 },
+    // assets (they need the disk too)
+    /// Look in the Assets folder again for new or changed pictures.
+    RefreshAssets,
+    SetTextureFilter { asset: AssetUuid, filter: TextureFilter },
     // history
     Undo,
     Redo,
@@ -137,6 +142,10 @@ pub enum IoRequest {
     PlacePrefab { file: String },
     /// Undo one revision of a prefab (Aphelion's Control).
     RevertRevision { prefab: AssetUuid, number: u32 },
+    /// Scan the Assets folder.
+    RefreshAssets,
+    /// Smooth or hard-pixel reading of a texture (written to its meta file).
+    SetTextureFilter { asset: AssetUuid, filter: TextureFilter },
 }
 
 /// State the controller side needs between frames. Not a model, nothing here is saved.
@@ -339,6 +348,8 @@ fn apply(command: UiCommand, models: &mut EditorModels, state: &mut ControllerSt
         UiCommand::ApplyToPrefab => state.pending_io.push(IoRequest::ApplyToPrefab),
         UiCommand::PlacePrefab { file } => state.pending_io.push(IoRequest::PlacePrefab { file }),
         UiCommand::RevertRevision { prefab, number } => state.pending_io.push(IoRequest::RevertRevision { prefab, number }),
+        UiCommand::RefreshAssets => state.pending_io.push(IoRequest::RefreshAssets),
+        UiCommand::SetTextureFilter { asset, filter } => state.pending_io.push(IoRequest::SetTextureFilter { asset, filter }),
 
         // ----- history -----
         UiCommand::Undo => step_history(models, state, Direction::Back, 1),
@@ -1046,5 +1057,23 @@ mod tests {
         let models = EditorModels::new_demo();
 
         assert!(matches!(action_to_command(actions::FOCUS_SELECTED, &models), Some(UiCommand::SceneViewFocus)));
+    }
+
+    #[test]
+    fn asset_commands_are_queued_for_the_app() {
+        let mut models = EditorModels::new_demo();
+        let mut state = ControllerState::default();
+        let asset = models.scene.data().uuid; // any uuid will do for this check
+
+        apply_all(
+            vec![UiCommand::RefreshAssets, UiCommand::SetTextureFilter { asset, filter: TextureFilter::Nearest }],
+            &mut models,
+            &mut state,
+        );
+
+        assert_eq!(
+            state.pending_io,
+            vec![IoRequest::RefreshAssets, IoRequest::SetTextureFilter { asset, filter: TextureFilter::Nearest }]
+        );
     }
 }

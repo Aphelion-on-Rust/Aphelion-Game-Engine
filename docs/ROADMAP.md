@@ -23,8 +23,9 @@ Heavy steps are done one at a time. Easy steps are grouped. After each step you 
 - [x] 7a Render components (ViewCamera, LightSource, MeshDraw, SpriteDraw), Create menu, scene to draw list
 - [x] 7b Software renderer (meshes, lights, sprites) and the real Scene / Game views
 - [x] 7c Scene view camera (orbit, pan, zoom, focus), picking and selection highlight
+- [x] 7d Textures and sprite images (asset files with fixed uuids). Materials come with the shader steps (12).
 
-About 16 steps and 340 files so far (delivery v0.1.1-alpha).
+About 17 steps and 360 files so far (delivery v0.1.2-alpha).
 
 ## To do (estimates)
 
@@ -33,7 +34,6 @@ File counts include tests and docs. Treat every number as +/- 40%.
 
 | Step | What                                                                 | Deliveries | New files |
 | ---- | -------------------------------------------------------------------- | ---------- | --------- |
-| 7d   | Sprite images, textures and materials | 1 | 15 |
 | 7e   | GPU backend that draws the same draw list | 1 | 15 |
 | 8    | Physics 2D + 3D: rigidbody, all colliders, joints, character controller, raycasts | 4 | 70   |
 | 9    | C# scripting host: load assemblies, bind the engine API, serialized fields | 3     | 45        |
@@ -45,9 +45,9 @@ File counts include tests and docs. Treat every number as +/- 40%.
 | 15   | Camera system (Cinemachine-like), mesh editing tool (ProBuilder-like) | 2         | 35        |
 | 16   | Input system UI, extensions, Windows build template                  | 3          | 45        |
 | 17   | Documentation pass                                                   | 2          | 25        |
-|      | **Total**                                                            | **about 33** | **about 450** |
+|      | **Total**                                                            | **about 32** | **about 435** |
 
-So roughly 33 more steps and 420 to 480 more files, about 790 files in the end.
+So roughly 32 more steps and 410 to 470 more files, about 790 files in the end.
 
 ## Where it can grow
 

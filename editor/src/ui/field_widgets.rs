@@ -9,6 +9,7 @@ use super::field::{NumberTarget, Part};
 use super::number_drag;
 use crate::number_field::NumberFieldConfig;
 use eframe::egui;
+use flux_engine::assets::AssetEntry;
 use flux_engine::identity::{AssetUuid, ComponentId};
 use flux_engine::inspect::defaults::default_value;
 use flux_engine::inspect::query::{label, layout, tooltip, LayoutItem};
@@ -23,6 +24,8 @@ pub struct FieldContext<'a> {
     pub component: ComponentId,
     /// All objects of the scene, for the object picker.
     pub objects: &'a [GameObjectData],
+    /// All assets of the project, for the asset picker.
+    pub assets: &'a [AssetEntry],
 }
 
 /// Gives the current value of a field at the level being drawn (for ShowIf and for the values).
@@ -358,6 +361,37 @@ fn edit_value(
 
             if let Some(choice) = picked {
                 set(commands, context, path, FieldValue::ObjectRef(choice));
+            }
+        }
+        (FieldKind::AssetRef { asset }, FieldValue::AssetRef(target)) => {
+            let shown = match target {
+                None => "None".to_string(),
+                Some(uuid) => context
+                    .assets
+                    .iter()
+                    .find(|entry| entry.uuid == *uuid)
+                    .map_or_else(|| "(missing asset)".to_string(), |entry| entry.path.clone()),
+            };
+            let mut picked: Option<Option<AssetUuid>> = None;
+
+            ui.add_enabled_ui(!read_only, |ui| {
+                egui::ComboBox::from_id_source((context.component.value(), format!("{:?}", path.segments())))
+                    .selected_text(shown)
+                    .show_ui(ui, |ui| {
+                        if ui.selectable_label(target.is_none(), "None").clicked() {
+                            picked = Some(None);
+                        }
+
+                        for entry in context.assets.iter().filter(|entry| entry.kind.name() == asset.as_str()) {
+                            if ui.selectable_label(*target == Some(entry.uuid), entry.path.as_str()).clicked() {
+                                picked = Some(Some(entry.uuid));
+                            }
+                        }
+                    });
+            });
+
+            if let Some(choice) = picked {
+                set(commands, context, path, FieldValue::AssetRef(choice));
             }
         }
         _ => {

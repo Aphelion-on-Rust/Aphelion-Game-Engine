@@ -2,10 +2,12 @@
 //! Plain functions with disk access. The models are only filled or read here, never changed
 //! except through their controllers.
 
+use crate::assets_io;
 use crate::prefab_library::{PrefabLibraryController, PrefabLibraryModel, PrefabListing};
 use flux_core::error::{EngineError, EngineResult};
 use flux_core::project::{disk, layout, ProjectData};
 use flux_core::storage::yaml::{load_yaml, save_yaml};
+use flux_engine::assets::{AssetLibraryController, AssetLibraryModel};
 use flux_engine::control::{query as control_query, ControlData, ControlModel, PrefabHistoryData};
 use flux_engine::identity::{IdController, IdRegistryData, IdRegistryModel};
 use flux_engine::inspect::{InspectController, SchemaLibraryData, SchemaLibraryModel, ScriptSchemaData};
@@ -25,6 +27,8 @@ pub struct OpenedProject {
     pub library: PrefabLibraryModel,
     /// The histories of all prefabs. Empty if the project has no Aphelion's Control.
     pub control: ControlModel,
+    /// The asset files (pictures) of the project.
+    pub assets: AssetLibraryModel,
     /// The fields of every script (`Library/script_schemas`), for the Inspector.
     pub schemas: SchemaLibraryModel,
     /// Files that could not be read. The project opens anyway, the editor shows these.
@@ -195,6 +199,10 @@ pub fn open_project(root: &Path) -> EngineResult<OpenedProject> {
 
     sync_script_fields(&mut scene, &schemas);
 
+    let mut assets = AssetLibraryModel::default();
+
+    AssetLibraryController.set_all(&mut assets, assets_io::scan_assets(root, &mut ids, &mut warnings)?);
+
     let listings = load_prefabs(root, &mut ids, &mut warnings)?;
     let control = if data.aphelion_control { load_control(root, &mut ids, &mut warnings)? } else { ControlData::default() };
 
@@ -204,7 +212,7 @@ pub fn open_project(root: &Path) -> EngineResult<OpenedProject> {
 
     PrefabLibraryController.set_all(&mut library, listings);
 
-    Ok(OpenedProject { root: root.to_path_buf(), data, scene, scene_path, ids, library, control: Store::new(control), schemas, warnings })
+    Ok(OpenedProject { root: root.to_path_buf(), data, scene, scene_path, ids, library, control: Store::new(control), assets, schemas, warnings })
 }
 
 pub fn save_scene(scene_path: &Path, scene: &SceneModel) -> EngineResult<()> {
@@ -412,5 +420,23 @@ mod tests {
 
         assert_eq!(opened.warnings.len(), 1);
         assert!(opened.schemas.data().scripts.is_empty());
+    }
+
+    #[test]
+    fn pictures_in_the_assets_folder_are_found_when_a_project_opens() {
+        let root = new_project("assets");
+
+        image::RgbaImage::from_pixel(2, 2, image::Rgba([0, 0, 255, 255]))
+            .save(root.join("Assets").join("sprite.png"))
+            .unwrap();
+
+        let first = open_project(&root).unwrap();
+        let again = open_project(&root).unwrap();
+
+        assert_eq!(first.assets.data().assets.len(), 1);
+        assert_eq!(first.assets.data().assets[0].path, "Assets/sprite.png");
+        // The same uuid after reopening, and the registry knows it.
+        assert_eq!(first.assets.data().assets[0].uuid, again.assets.data().assets[0].uuid);
+        assert!(IdController.is_uuid_used(&again.ids, &again.assets.data().assets[0].uuid));
     }
 }

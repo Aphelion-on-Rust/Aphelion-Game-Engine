@@ -8,17 +8,22 @@
 //! panel, the camera or the selection changed, and it is never drawn wider than 640 pixels (it is
 //! stretched). Run the editor in release mode (`cargo run --release -p flux-editor`) for a smooth view.
 
+use crate::assets_io::load_texture;
 use crate::scene_view::query::render_camera;
 use crate::scene_view::SceneCameraData;
 use crate::ui::commands::UiCommand;
 use crate::ui::models::EditorModels;
 use eframe::egui;
+use flux_engine::assets::{query as asset_query, AssetLibraryData, TextureFilter};
 use flux_engine::identity::AssetUuid;
 use flux_engine::mivc::Model;
-use flux_engine::scene::SceneData;
+use flux_engine::scene::{ComponentData, SceneData};
 use flux_grp::backend::RenderBackend;
-use flux_grp::frame::{collect, fallback_camera, find_game_camera};
+use flux_grp::frame::{collect, fallback_camera, find_game_camera, TextureImage};
 use flux_grp::software::SoftwareRenderer;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::SystemTime;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ViewKind {
@@ -34,6 +39,17 @@ pub struct ViewCache {
     last_size: [usize; 2],
     last_camera: Option<SceneCameraData>,
     last_selected: Vec<AssetUuid>,
+    last_assets: Option<AssetLibraryData>,
+    /// The pictures read from disk so far, so they are not read again for every frame.
+    textures: HashMap<AssetUuid, LoadedTexture>,
+}
+
+/// A picture that was read from disk (`image` is None if it could not be read).
+struct LoadedTexture {
+    path: String,
+    nearest: bool,
+    modified: Option<SystemTime>,
+    image: Option<Arc<TextureImage>>,
 }
 
 const MAX_WIDTH: f32 = 640.0;
@@ -66,9 +82,11 @@ pub fn show(ui: &mut egui::Ui, cache: &mut ViewCache, kind: ViewKind, models: &E
 
     // The Scene view also depends on its camera and the selection, the Game view does not.
     let same_view = kind == ViewKind::Game || (cache.last_camera.as_ref() == Some(camera_data) && cache.last_selected == *selected);
-    let up_to_date = cache.texture.is_some() && cache.last_size == [width, height] && cache.last_scene.as_ref() == Some(scene) && same_view;
+    let up_to_date = cache.texture.is_some() && cache.last_size == [width, height] && cache.last_scene.as_ref() == Some(scene) && same_view
+        && cache.last_assets.as_ref() == Some(models.assets.data());
 
     if !up_to_date {
+        let textures = load_textures(cache, models, scene);
         let mut frame = match kind {
             ViewKind::Game => collect(scene, game_camera.unwrap_or_else(|| fallback_camera(aspect))),
             ViewKind::Scene => collect(scene, render_camera(camera_data, aspect)),
@@ -77,6 +95,8 @@ pub fn show(ui: &mut egui::Ui, cache: &mut ViewCache, kind: ViewKind, models: &E
         if kind == ViewKind::Scene {
             frame.selected = selected.clone();
         }
+
+        frame.textures = textures;
 
         let image = SoftwareRenderer.render(&frame, width, height);
         let picture = egui::ColorImage::from_rgba_unmultiplied([width, height], &image.rgba);
@@ -94,6 +114,7 @@ pub fn show(ui: &mut egui::Ui, cache: &mut ViewCache, kind: ViewKind, models: &E
         cache.last_size = [width, height];
         cache.last_camera = Some(camera_data.clone());
         cache.last_selected = selected.clone();
+        cache.last_assets = Some(models.assets.data().clone());
     }
 
     if let Some(texture) = &cache.texture {
@@ -142,4 +163,56 @@ fn mouse_controls(ui: &egui::Ui, response: &egui::Response, aspect: f32, command
             });
         }
     }
+}
+
+/// The pictures the scene's meshes and sprites use. They are read from disk the first time, and again
+/// when the file changed on disk, its path changed, or its filter changed.
+fn load_textures(cache: &mut ViewCache, models: &EditorModels, scene: &SceneData) -> HashMap<AssetUuid, Arc<TextureImage>> {
+    let mut wanted: Vec<AssetUuid> = Vec::new();
+
+    for object in &scene.objects {
+        for entry in &object.components {
+            let texture = match &entry.data {
+                ComponentData::MeshDraw(mesh) => mesh.texture,
+                ComponentData::SpriteDraw(sprite) => sprite.texture,
+                _ => None,
+            };
+
+            if let Some(uuid) = texture {
+                if !wanted.contains(&uuid) {
+                    wanted.push(uuid);
+                }
+            }
+        }
+    }
+
+    let mut found = HashMap::new();
+    let Some(project) = &models.project else {
+        return found;
+    };
+
+    for uuid in wanted {
+        let Some(asset) = asset_query::find_by_uuid(models.assets.data(), &uuid) else {
+            continue;
+        };
+        let file = project.root.join(&asset.path);
+        let nearest = asset.filter == TextureFilter::Nearest;
+        let modified = std::fs::metadata(&file).and_then(|info| info.modified()).ok();
+        let fresh = cache
+            .textures
+            .get(&uuid)
+            .map_or(false, |loaded| loaded.path == asset.path && loaded.nearest == nearest && loaded.modified == modified);
+
+        if !fresh {
+            let image = load_texture(&file, nearest).ok().map(Arc::new);
+
+            cache.textures.insert(uuid, LoadedTexture { path: asset.path.clone(), nearest, modified, image });
+        }
+
+        if let Some(image) = cache.textures.get(&uuid).and_then(|loaded| loaded.image.clone()) {
+            found.insert(uuid, image);
+        }
+    }
+
+    found
 }

@@ -7,7 +7,7 @@ The renderer is built in steps. Step 7a is everything that happens **before** a 
 | 7a   | Rendering components, ready-made objects, the maths that turns a scene into a draw list (done) |
 | 7b   | A software renderer (runs on the CPU, no GPU needed) and the real Scene / Game views (done) |
 | 7c   | The editor camera (orbit, pan, zoom), picking and selection (done)                |
-| 7d   | Sprite images, textures and materials                                             |
+| 7d   | Textures and sprite images, with asset files that have fixed uuids (done)         |
 | 7e   | A GPU backend that draws the same draw list                                       |
 
 The software renderer comes first on purpose: it works on every computer, its output can be checked
@@ -62,6 +62,17 @@ there is none). The **Scene** view uses a built-in camera for now, orbit / pan /
 The picture is drawn again only when the scene or the panel size changes, and never wider than 640 pixels
 (it is stretched). Drawing on the CPU is slow in a debug build: use `cargo run --release -p flux-editor`.
 The demo scene has a ground, a crate and a ball so there is something to see.
+
+## Textures (`grp/src/software/texture.rs`)
+
+`MeshDraw` and `SpriteDraw` can have a texture (an asset, see `docs/ASSETS.md`). The color is multiplied with the
+picture. Every shape has texture coordinates: boxes and the plane use the whole picture on each face, the sphere
+and capsule wrap it around (u) and from top to bottom (v), the cylinder wraps the side and shows the picture
+on both caps. A mesh also has **Tiling** and **Offset**. Sampling is *smooth* (the four nearest pixels are
+blended) or *hard pixels* when the asset's filter is Nearest. Outside 0 to 1 the picture repeats.
+Sprites flip with *flip X / flip Y* and use the alpha of the picture.
+
+Materials (shaders, normal maps ...) come with the shader steps. For now the color and the texture are all there is.
 
 ## Picking (`grp/src/pick.rs`)
 

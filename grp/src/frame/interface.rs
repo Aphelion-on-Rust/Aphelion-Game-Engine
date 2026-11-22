@@ -1,6 +1,8 @@
 use flux_engine::components::{LightKind, PrimitiveMesh};
 use flux_engine::identity::AssetUuid;
 use glam::{Mat4, Vec3};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 /// The camera a frame is drawn from.
 #[derive(Clone, Debug, PartialEq)]
@@ -17,6 +19,16 @@ pub struct RenderCamera {
     pub far: f32,
 }
 
+/// A picture in memory, ready to be sampled: red, green, blue, alpha bytes, row by row from the top.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TextureImage {
+    pub width: usize,
+    pub height: usize,
+    pub rgba: Vec<u8>,
+    /// Hard pixels (pixel art) instead of smooth blending.
+    pub nearest: bool,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct RenderMesh {
     pub object: AssetUuid,
@@ -27,6 +39,10 @@ pub struct RenderMesh {
     pub unlit: bool,
     pub cast_shadows: bool,
     pub receive_shadows: bool,
+    /// A texture asset, multiplied with `color`.
+    pub texture: Option<AssetUuid>,
+    pub tiling: [f32; 2],
+    pub offset: [f32; 2],
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -38,6 +54,8 @@ pub struct RenderSprite {
     pub flip_x: bool,
     pub flip_y: bool,
     pub order: i32,
+    /// A texture asset, multiplied with `color`.
+    pub texture: Option<AssetUuid>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -65,4 +83,6 @@ pub struct RenderFrame {
     pub lights: Vec<RenderLight>,
     /// Objects to draw highlighted (the editor puts the selection here).
     pub selected: Vec<AssetUuid>,
+    /// The pictures the meshes and sprites refer to. `collect` leaves it empty, the editor loads them.
+    pub textures: HashMap<AssetUuid, Arc<TextureImage>>,
 }

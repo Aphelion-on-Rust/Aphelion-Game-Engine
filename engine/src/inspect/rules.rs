@@ -52,6 +52,7 @@ pub fn kind_name(kind: &FieldKind) -> &'static str {
         FieldKind::Color => "color",
         FieldKind::Enum { .. } => "enum",
         FieldKind::ObjectRef => "object reference",
+        FieldKind::AssetRef { .. } => "asset reference",
         FieldKind::List { .. } => "list",
         FieldKind::Struct { .. } => "struct",
     }
@@ -68,6 +69,7 @@ fn value_name(value: &FieldValue) -> &'static str {
         FieldValue::Color(_) => "a color",
         FieldValue::Enum(_) => "an enum value",
         FieldValue::ObjectRef(_) => "an object reference",
+        FieldValue::AssetRef(_) => "an asset reference",
         FieldValue::List(_) => "a list",
         FieldValue::Struct(_) => "a struct",
     }
@@ -106,6 +108,7 @@ pub fn validate_value(kind: &FieldKind, attributes: &[FieldAttribute], value: Fi
             }
         }
         (FieldKind::ObjectRef, FieldValue::ObjectRef(target)) => Ok(FieldValue::ObjectRef(target)),
+        (FieldKind::AssetRef { .. }, FieldValue::AssetRef(target)) => Ok(FieldValue::AssetRef(target)),
         (FieldKind::List { element }, FieldValue::List(items)) => items
             .into_iter()
             .map(|item| validate_value(element, attributes, item))
@@ -279,5 +282,14 @@ mod tests {
         assert!(resolve(&fields, &FieldPath::field("missing")).is_err());
         assert!(resolve(&fields, &FieldPath::field("waypoints").child_field("x")).is_err());
         assert!(resolve(&fields, &FieldPath::default()).is_err());
+    }
+
+    #[test]
+    fn an_asset_reference_takes_an_asset_or_nothing_and_nothing_else() {
+        let kind = FieldKind::AssetRef { asset: "Texture".to_string() };
+
+        assert_eq!(validate_value(&kind, &[], FieldValue::AssetRef(None)), Ok(FieldValue::AssetRef(None)));
+        assert!(validate_value(&kind, &[], FieldValue::ObjectRef(None)).is_err());
+        assert!(validate_value(&FieldKind::ObjectRef, &[], FieldValue::AssetRef(None)).is_err());
     }
 }

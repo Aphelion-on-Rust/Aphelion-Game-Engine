@@ -17,6 +17,7 @@ description, no new Inspector code. The data and rules are in `engine/src/inspec
 | `Color`   | red, green, blue, alpha       | color picker                  |
 | `Enum`    | one of a list of names        | drop-down                     |
 | `ObjectRef` | another object in the scene | object picker                 |
+| `AssetRef`  | an asset file (a texture)   | asset picker, lists the project's assets of that kind |
 | `List`    | elements of one kind          | list with add / remove        |
 | `Struct`  | named fields (`[Serializable]`) | indented group of fields    |
 

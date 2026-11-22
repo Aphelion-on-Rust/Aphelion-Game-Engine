@@ -88,7 +88,7 @@ fn component_section(
             // The fields come from the component's description (built in, or the script's schema).
             match schema_for(&entry.data, models.schemas.data()) {
                 Some(schema) => {
-                    let context = FieldContext { object: uuid, component: entry.id, objects };
+                    let context = FieldContext { object: uuid, component: entry.id, objects, assets: &models.assets.data().assets };
                     let lookup = |name: &str| read_field(&entry.data, &FieldPath::field(name));
 
                     draw_fields(ui, &context, &schema, &FieldPath::default(), &lookup, false, commands);

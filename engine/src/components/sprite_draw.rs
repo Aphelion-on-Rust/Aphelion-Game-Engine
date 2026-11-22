@@ -1,3 +1,4 @@
+use crate::identity::AssetUuid;
 use crate::math::{Rgba, Vec2};
 use serde::{Deserialize, Serialize};
 
@@ -13,10 +14,13 @@ pub struct SpriteDrawData {
     /// Width and height in world units.
     pub size: Vec2,
     pub visible: bool,
+    /// A texture asset (the picture of the sprite). Its colors are multiplied with `color`.
+    #[serde(default)]
+    pub texture: Option<AssetUuid>,
 }
 
 impl Default for SpriteDrawData {
     fn default() -> Self {
-        Self { color: Rgba::WHITE, flip_x: false, flip_y: false, order: 0, size: Vec2::new(1.0, 1.0), visible: true }
+        Self { color: Rgba::WHITE, flip_x: false, flip_y: false, order: 0, size: Vec2::new(1.0, 1.0), visible: true, texture: None }
     }
 }

@@ -13,6 +13,7 @@ pub fn default_value(kind: &FieldKind) -> FieldValue {
         FieldKind::Color => FieldValue::Color(Rgba::WHITE),
         FieldKind::Enum { options } => FieldValue::Enum(options.first().cloned().unwrap_or_default()),
         FieldKind::ObjectRef => FieldValue::ObjectRef(None),
+        FieldKind::AssetRef { .. } => FieldValue::AssetRef(None),
         FieldKind::List { .. } => FieldValue::List(Vec::new()),
         FieldKind::Struct { fields } => FieldValue::Struct(
             fields

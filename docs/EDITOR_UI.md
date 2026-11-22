@@ -26,6 +26,9 @@ Run it with `cargo run -p flux-editor`.
 - Started with `--project <folder>` (the launcher does this) the editor opens that project's scene.
   Ctrl+S saves the scene and the id registry. The window title shows `*` for unsaved changes.
   Without `--project` you get a demo scene and nothing can be saved.
+- The Project panel also lists the project's pictures (Assets) with a Refresh button and a Smooth / Hard pixels
+  choice for each. Pictures are picked in the Inspector on `MeshDraw` (Texture) and `SpriteDraw` (Sprite).
+  See `docs/ASSETS.md`.
 - The Project panel shows the project's name, engine version, pipeline and Aphelion's Control.
 - Prefabs: right-click an object > Create Prefab / Apply Changes to Prefab. The Project panel lists
   the prefabs with a Place in scene button. Window > Aphelion's Control shows each prefab's

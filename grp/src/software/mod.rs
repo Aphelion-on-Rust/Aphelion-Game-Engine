@@ -8,13 +8,15 @@
 pub mod mesh;
 pub mod raster;
 pub mod shade;
+pub mod texture;
 
 use crate::backend::RenderBackend;
-use crate::frame::{RenderCamera, RenderFrame, RenderMesh, RenderSprite};
-use glam::{Mat3, Mat4, Vec3};
+use crate::frame::{RenderCamera, RenderFrame, RenderMesh, RenderSprite, TextureImage};
+use glam::{Mat3, Mat4, Vec2, Vec3};
 use mesh::primitive;
 use raster::{draw_triangle, ClipVertex, DrawMode, Target};
 use shade::lit_color;
+use texture::sample;
 
 /// A finished picture: red, green, blue, alpha bytes, row by row from the top.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -59,7 +61,9 @@ pub fn render(frame: &RenderFrame, width: usize, height: usize) -> Image {
     }
 
     for sprite in &frame.sprites {
-        draw_sprite(&mut target, view_projection, sprite, frame.selected.contains(&sprite.object));
+        let texture = sprite.texture.and_then(|id| frame.textures.get(&id)).map(|texture| texture.as_ref());
+
+        draw_sprite(&mut target, view_projection, sprite, frame.selected.contains(&sprite.object), texture);
     }
 
     let mut rgba = Vec::with_capacity(width * height * 4);
@@ -95,14 +99,21 @@ fn draw_mesh(target: &mut Target, frame: &RenderFrame, view_projection: Mat4, fo
     }
 
     let normal_matrix = normal_matrix.inverse().transpose();
+    let texture = mesh.texture.and_then(|id| frame.textures.get(&id));
     let vertices: Vec<ClipVertex> = shape
         .positions
         .iter()
         .zip(&shape.normals)
-        .map(|(position, normal)| {
+        .zip(&shape.uvs)
+        .map(|((position, normal), uv)| {
             let world = mesh.model.transform_point3(*position);
 
-            ClipVertex { clip: view_projection * world.extend(1.0), world, normal: (normal_matrix * *normal).normalize_or_zero() }
+            ClipVertex {
+                clip: view_projection * world.extend(1.0),
+                world,
+                normal: (normal_matrix * *normal).normalize_or_zero(),
+                uv: *uv,
+            }
         })
         .collect();
     let orthographic = is_orthographic(&frame.camera);
@@ -121,26 +132,46 @@ fn draw_mesh(target: &mut Target, frame: &RenderFrame, view_projection: Mat4, fo
         }
 
         draw_triangle(target, triangle, mode, &mut |fragment| {
+            // The texture (if any) is multiplied with the color. Its alpha is not used on meshes.
+            let tint = match texture {
+                Some(texture) => sample(
+                    texture,
+                    Vec2::new(fragment.uv.x * mesh.tiling[0] + mesh.offset[0], fragment.uv.y * mesh.tiling[1] + mesh.offset[1]),
+                ),
+                None => [1.0; 4],
+            };
+            let base = [base_color[0] * tint[0], base_color[1] * tint[1], base_color[2] * tint[2], 1.0];
+
             if mesh.unlit {
-                return Some([base_color[0], base_color[1], base_color[2], 1.0]);
+                return Some(base);
             }
 
-            let color = lit_color(base_color, fragment.world, fragment.normal.normalize_or_zero(), &frame.lights);
+            let color = lit_color(base, fragment.world, fragment.normal.normalize_or_zero(), &frame.lights);
 
             Some([color[0], color[1], color[2], 1.0])
         });
     }
 }
 
-fn draw_sprite(target: &mut Target, view_projection: Mat4, sprite: &RenderSprite, selected: bool) {
+fn draw_sprite(target: &mut Target, view_projection: Mat4, sprite: &RenderSprite, selected: bool, texture: Option<&TextureImage>) {
     let color = if selected { highlight(sprite.color) } else { sprite.color };
     let corners = [Vec3::new(-0.5, -0.5, 0.0), Vec3::new(0.5, -0.5, 0.0), Vec3::new(0.5, 0.5, 0.0), Vec3::new(-0.5, 0.5, 0.0)];
     let vertices: Vec<ClipVertex> = corners
         .iter()
         .map(|corner| {
             let world = sprite.model.transform_point3(*corner);
+            // The bottom left corner is (0, 0) of the picture, the top right (1, 1).
+            let (mut u, mut v) = (corner.x + 0.5, corner.y + 0.5);
 
-            ClipVertex { clip: view_projection * world.extend(1.0), world, normal: Vec3::NEG_Z }
+            if sprite.flip_x {
+                u = 1.0 - u;
+            }
+
+            if sprite.flip_y {
+                v = 1.0 - v;
+            }
+
+            ClipVertex { clip: view_projection * world.extend(1.0), world, normal: Vec3::NEG_Z, uv: Vec2::new(u, v) }
         })
         .collect();
     let mode = DrawMode { depth_write: false, depth_equal_ok: true };
@@ -148,7 +179,11 @@ fn draw_sprite(target: &mut Target, view_projection: Mat4, sprite: &RenderSprite
     for triangle in [[0, 1, 2], [0, 2, 3]] {
         let corners = [vertices[triangle[0]], vertices[triangle[1]], vertices[triangle[2]]];
 
-        draw_triangle(target, corners, mode, &mut |_| Some(color));
+        draw_triangle(target, corners, mode, &mut |fragment| {
+            let tint = texture.map_or([1.0; 4], |texture| sample(texture, fragment.uv));
+
+            Some([color[0] * tint[0], color[1] * tint[1], color[2] * tint[2], color[3] * tint[3]])
+        });
     }
 }
 
@@ -179,6 +214,9 @@ mod tests {
             unlit,
             cast_shadows: true,
             receive_shadows: true,
+            texture: None,
+            tiling: [1.0, 1.0],
+            offset: [0.0, 0.0],
         }
     }
 
@@ -197,7 +235,7 @@ mod tests {
     }
 
     fn frame(camera: RenderCamera, meshes: Vec<RenderMesh>, lights: Vec<RenderLight>) -> RenderFrame {
-        RenderFrame { camera, meshes, sprites: Vec::new(), lights, selected: Vec::new() }
+        RenderFrame { camera, meshes, sprites: Vec::new(), lights, selected: Vec::new(), textures: Default::default() }
     }
 
     fn near(actual: [u8; 4], expected: [u8; 3]) -> bool {
@@ -318,6 +356,7 @@ mod tests {
             flip_x: false,
             flip_y: false,
             order,
+            texture: None,
         };
         let mut picture = frame(camera.clone(), vec![], vec![]);
 
@@ -350,5 +389,97 @@ mod tests {
 
         // white * 0.65 + orange (1.0, 0.6, 0.1) * 0.35
         assert!(near(render(&picture, 32, 32).pixel(16, 16), [255, 219, 175]));
+    }
+
+    fn picture_texture(width: usize, height: usize, rgba: Vec<u8>) -> std::sync::Arc<TextureImage> {
+        std::sync::Arc::new(TextureImage { width, height, rgba, nearest: true })
+    }
+
+    #[test]
+    fn a_textured_sprite_shows_the_corners_of_its_picture_in_the_right_places() {
+        let camera = camera_from_world(
+            None,
+            Mat4::from_translation(Vec3::new(0.0, 0.0, -5.0)),
+            &ViewCameraData { projection: Projection::Orthographic, ortho_size: 2.0, ..Default::default() },
+            1.0,
+        );
+        let id = uuid();
+        let sprite = RenderSprite {
+            object: uuid(),
+            model: Mat4::from_scale(Vec3::new(2.0, 2.0, 1.0)),
+            color: [1.0; 4],
+            flip_x: false,
+            flip_y: false,
+            order: 0,
+            texture: Some(id),
+        };
+        let mut picture = frame(camera, vec![], vec![]);
+
+        // red, green / blue, white
+        picture.textures.insert(
+            id,
+            picture_texture(2, 2, vec![255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255]),
+        );
+        picture.sprites = vec![sprite.clone()];
+
+        let image = render(&picture, 32, 32);
+
+        assert_eq!(image.pixel(12, 12), [255, 0, 0, 255]);
+        assert_eq!(image.pixel(20, 12), [0, 255, 0, 255]);
+        assert_eq!(image.pixel(12, 20), [0, 0, 255, 255]);
+        assert_eq!(image.pixel(20, 20), [255, 255, 255, 255]);
+
+        // Flipped left to right.
+        picture.sprites = vec![RenderSprite { flip_x: true, ..sprite }];
+
+        let flipped = render(&picture, 32, 32);
+
+        assert_eq!(flipped.pixel(12, 12), [0, 255, 0, 255]);
+        assert_eq!(flipped.pixel(20, 12), [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn a_see_through_texel_shows_what_is_behind_the_sprite() {
+        let camera = camera_from_world(
+            None,
+            Mat4::from_translation(Vec3::new(0.0, 0.0, -5.0)),
+            &ViewCameraData { projection: Projection::Orthographic, ortho_size: 2.0, ..Default::default() },
+            1.0,
+        );
+        let id = uuid();
+        let mut picture = frame(camera, vec![], vec![]);
+
+        picture.textures.insert(id, picture_texture(1, 1, vec![255, 255, 255, 0]));
+        picture.sprites = vec![RenderSprite {
+            object: uuid(),
+            model: Mat4::from_scale(Vec3::new(2.0, 2.0, 1.0)),
+            color: [1.0; 4],
+            flip_x: false,
+            flip_y: false,
+            order: 0,
+            texture: Some(id),
+        }];
+
+        assert_eq!(render(&picture, 32, 32).pixel(16, 16), [26, 31, 41, 255]);
+    }
+
+    #[test]
+    fn a_texture_on_a_mesh_is_multiplied_with_its_color_and_a_missing_texture_is_ignored() {
+        let id = uuid();
+        let mut cube = mesh_at(PrimitiveMesh::Cube, Vec3::ZERO, [1.0, 1.0, 1.0, 1.0], true);
+
+        cube.texture = Some(id);
+
+        let mut picture = frame(camera(), vec![cube.clone()], vec![]);
+
+        // The texture is not loaded: the cube is just white.
+        assert_eq!(render(&picture, 64, 64).pixel(32, 32), [255, 255, 255, 255]);
+
+        picture.textures.insert(id, picture_texture(1, 1, vec![0, 0, 255, 255]));
+        assert_eq!(render(&picture, 64, 64).pixel(32, 32), [0, 0, 255, 255]);
+
+        // A red color times a blue texture is black.
+        picture.meshes = vec![RenderMesh { color: [1.0, 0.0, 0.0, 1.0], ..cube }];
+        assert_eq!(render(&picture, 64, 64).pixel(32, 32), [0, 0, 0, 255]);
     }
 }

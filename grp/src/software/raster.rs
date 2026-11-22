@@ -1,6 +1,6 @@
 //! Drawing triangles into a picture: clipping, depth test, and perspective-correct interpolation.
 
-use glam::{Vec3, Vec4};
+use glam::{Vec2, Vec3, Vec4};
 
 /// A corner of a triangle, after the camera has been applied.
 #[derive(Clone, Copy)]
@@ -9,6 +9,8 @@ pub struct ClipVertex {
     pub clip: Vec4,
     pub world: Vec3,
     pub normal: Vec3,
+    /// Where this corner is on the texture.
+    pub uv: Vec2,
 }
 
 /// The picture being drawn: a color and a depth value for every pixel.
@@ -31,6 +33,7 @@ impl Target {
 pub struct Fragment {
     pub world: Vec3,
     pub normal: Vec3,
+    pub uv: Vec2,
 }
 
 #[derive(Clone, Copy)]
@@ -46,6 +49,7 @@ fn lerp(a: ClipVertex, b: ClipVertex, t: f32) -> ClipVertex {
         clip: a.clip + (b.clip - a.clip) * t,
         world: a.world + (b.world - a.world) * t,
         normal: a.normal + (b.normal - a.normal) * t,
+        uv: a.uv + (b.uv - a.uv) * t,
     }
 }
 
@@ -161,6 +165,7 @@ fn fill(target: &mut Target, vertices: [ClipVertex; 3], mode: DrawMode, shade: &
             let fragment = Fragment {
                 world: (vertices[0].world * a0 + vertices[1].world * a1 + vertices[2].world * a2) / sum,
                 normal: (vertices[0].normal * a0 + vertices[1].normal * a1 + vertices[2].normal * a2) / sum,
+                uv: (vertices[0].uv * a0 + vertices[1].uv * a1 + vertices[2].uv * a2) / sum,
             };
 
             if let Some(color) = shade(&fragment) {

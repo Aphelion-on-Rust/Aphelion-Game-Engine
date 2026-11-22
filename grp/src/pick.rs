@@ -142,11 +142,14 @@ mod tests {
             unlit: true,
             cast_shadows: true,
             receive_shadows: true,
+            texture: None,
+            tiling: [1.0, 1.0],
+            offset: [0.0, 0.0],
         }
     }
 
     fn frame(camera: RenderCamera, meshes: Vec<RenderMesh>, sprites: Vec<RenderSprite>) -> RenderFrame {
-        RenderFrame { camera, meshes, sprites, lights: Vec::new(), selected: Vec::new() }
+        RenderFrame { camera, meshes, sprites, lights: Vec::new(), selected: Vec::new(), textures: Default::default() }
     }
 
     #[test]
@@ -203,6 +206,7 @@ mod tests {
             flip_x: false,
             flip_y: false,
             order: 0,
+            texture: None,
         };
         let sprite_id = sprite.object;
         let mut picture = frame(camera(), vec![], vec![sprite]);

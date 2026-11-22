@@ -6,7 +6,7 @@ resolver = "2"
 members = ["core", "engine", "editor", "launcher", "scripting", "grp", "extensions"]
 
 [workspace.package]
-version = "0.1.1-alpha"
+version = "0.1.2-alpha"
 edition = "2021"
 authors = ["atropinex"]
 
@@ -24,3 +24,5 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 sha2 = "0.10"
 # Rendering math (grp):
 glam = "0.29"
+# Decoding picture files (editor):
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }

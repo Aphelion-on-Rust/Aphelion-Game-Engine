@@ -5,6 +5,7 @@ use flux_engine::identity::AssetUuid;
 use flux_engine::math::Rgba;
 use flux_engine::scene::{query, ComponentData, GameObjectData, SceneData};
 use glam::{Mat4, Vec3};
+use std::collections::HashMap;
 
 fn rgba(color: Rgba) -> [f32; 4] {
     [color.r, color.g, color.b, color.a]
@@ -82,7 +83,7 @@ pub fn fallback_camera(aspect: f32) -> RenderCamera {
 /// Inactive objects (and objects inside inactive ones) and parts marked not visible are left out.
 pub fn collect(scene: &SceneData, camera: RenderCamera) -> RenderFrame {
     let objects = &scene.objects;
-    let mut frame = RenderFrame { camera, meshes: Vec::new(), sprites: Vec::new(), lights: Vec::new(), selected: Vec::new() };
+    let mut frame = RenderFrame { camera, meshes: Vec::new(), sprites: Vec::new(), lights: Vec::new(), selected: Vec::new(), textures: HashMap::new() };
 
     for object in objects {
         if !query::is_active_in_hierarchy(objects, &object.uuid) {
@@ -103,6 +104,9 @@ pub fn collect(scene: &SceneData, camera: RenderCamera) -> RenderFrame {
                     unlit: mesh.unlit,
                     cast_shadows: mesh.cast_shadows,
                     receive_shadows: mesh.receive_shadows,
+                    texture: mesh.texture,
+                    tiling: [mesh.tiling.x, mesh.tiling.y],
+                    offset: [mesh.offset.x, mesh.offset.y],
                 }),
                 ComponentData::SpriteDraw(sprite) if sprite.visible => frame.sprites.push(RenderSprite {
                     object: object.uuid,
@@ -111,6 +115,7 @@ pub fn collect(scene: &SceneData, camera: RenderCamera) -> RenderFrame {
                     flip_x: sprite.flip_x,
                     flip_y: sprite.flip_y,
                     order: sprite.order,
+                    texture: sprite.texture,
                 }),
                 ComponentData::LightSource(light) => frame.lights.push(RenderLight {
                     object: object.uuid,
@@ -334,5 +339,36 @@ mod tests {
         assert!(middle.z > 0.0 && middle.z < 1.0);
         assert!(camera.view.determinant().abs() > 0.0);
         assert!(camera.object.is_none());
+    }
+
+    #[test]
+    fn textures_tiling_and_offset_are_carried_into_the_draw_list() {
+        use flux_engine::identity::IdController;
+        use flux_engine::math::Vec2 as V2;
+
+        let mut world = world();
+        let texture = IdController.new_uuid(&mut world.ids);
+        let cube = add(&mut world, ObjectPreset::Cube, None);
+        let sprite = add(&mut world, ObjectPreset::Sprite, None);
+
+        edit(&mut world, cube, 1, |data| {
+            if let ComponentData::MeshDraw(mesh) = data {
+                mesh.texture = Some(texture);
+                mesh.tiling = V2::new(3.0, 2.0);
+                mesh.offset = V2::new(0.5, 0.25);
+            }
+        });
+        edit(&mut world, sprite, 1, |data| {
+            if let ComponentData::SpriteDraw(draw) = data {
+                draw.texture = Some(texture);
+            }
+        });
+
+        let frame = collect(data(&world), fallback_camera(1.0));
+
+        assert_eq!(frame.meshes[0].texture, Some(texture));
+        assert_eq!((frame.meshes[0].tiling, frame.meshes[0].offset), ([3.0, 2.0], [0.5, 0.25]));
+        assert_eq!(frame.sprites[0].texture, Some(texture));
+        assert!(frame.textures.is_empty());
     }
 }

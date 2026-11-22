@@ -6,6 +6,7 @@
 //! (A derive macro that writes the list from the struct could come later.)
 
 use super::interface::{FieldAttribute, FieldDescriptor, FieldKind, FieldValue};
+use crate::identity::AssetUuid;
 use crate::components::{LightData, LightKind, MeshDrawData, PrimitiveMesh, Projection, SpriteDrawData, ViewCameraData};
 use crate::math::{Rgba, Vec2, Vec3};
 use crate::scene::{ComponentData, RectTransformData, TransformData};
@@ -122,6 +123,29 @@ fn vec3<T: 'static>(name: &'static str, attributes: Vec<FieldAttribute>, get: fn
         Box::new(move |data, value| match value {
             FieldValue::Vec3(vector) => {
                 set(data, vector);
+                Ok(())
+            }
+            _ => Err(wrong_kind(name)),
+        }),
+    )
+}
+
+/// A reference to an asset file (the picker in the Inspector lists the assets of that kind).
+fn asset_ref<T: 'static>(
+    name: &'static str,
+    asset: &'static str,
+    attributes: Vec<FieldAttribute>,
+    get: fn(&T) -> Option<AssetUuid>,
+    set: fn(&mut T, Option<AssetUuid>),
+) -> Field<T> {
+    field(
+        name,
+        FieldKind::AssetRef { asset: asset.to_string() },
+        attributes,
+        Box::new(move |data| FieldValue::AssetRef(get(data))),
+        Box::new(move |data, value| match value {
+            FieldValue::AssetRef(target) => {
+                set(data, target);
                 Ok(())
             }
             _ => Err(wrong_kind(name)),
@@ -292,6 +316,9 @@ fn mesh_draw_fields() -> &'static [Field<MeshDrawData>] {
             boolean("cast_shadows", vec![], |m: &MeshDrawData| m.cast_shadows, |m, v| m.cast_shadows = v),
             boolean("receive_shadows", vec![], |m: &MeshDrawData| m.receive_shadows, |m, v| m.receive_shadows = v),
             boolean("visible", vec![], |m: &MeshDrawData| m.visible, |m, v| m.visible = v),
+            asset_ref("texture", "Texture", vec![], |m: &MeshDrawData| m.texture, |m, v| m.texture = v),
+            vec2("tiling", vec![tooltip("How often the texture repeats")], |m: &MeshDrawData| m.tiling, |m, v| m.tiling = v),
+            vec2("offset", vec![tooltip("Moves the texture across the shape")], |m: &MeshDrawData| m.offset, |m, v| m.offset = v),
         ]
     })
 }
@@ -312,6 +339,7 @@ fn sprite_draw_fields() -> &'static [Field<SpriteDrawData>] {
             ),
             vec2("size", vec![min(0.0), tooltip("Width and height in world units")], |s: &SpriteDrawData| s.size, |s, v| s.size = v),
             boolean("visible", vec![], |s: &SpriteDrawData| s.visible, |s, v| s.visible = v),
+            asset_ref("texture", "Texture", vec![label("Sprite"), tooltip("The picture of the sprite")], |s: &SpriteDrawData| s.texture, |s, v| s.texture = v),
         ]
     })
 }
