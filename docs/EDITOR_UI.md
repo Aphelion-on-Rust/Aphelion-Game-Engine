@@ -8,6 +8,9 @@ Run it with `cargo run -p flux-editor`.
   The highlight shows where it will land. Escape cancels.
 - Drag the dividers between panels. Click the small x on a tab to close it.
 - Window menu: open a closed panel, reset the layout. Theme menu: switch Dark / Light.
+- Scene view: right-drag orbits the camera, middle-drag pans, the wheel zooms, a click selects the object under
+  the mouse (Ctrl+click adds), F focuses on the selection. The selection is drawn tinted orange.
+  Game view: shows the scene's own camera. See `docs/RENDERING.md`.
 - Hierarchy: **+ Create** makes a cube, sphere, camera, light, sprite ... (see `docs/RENDERING.md`). Click, Ctrl+click, double-click or F2 to rename in place (Enter accepts, Escape cancels),
   arrows to open, right-click menu, drag a row onto another row
   to make it a child, drop in the empty area to move it to the top level.

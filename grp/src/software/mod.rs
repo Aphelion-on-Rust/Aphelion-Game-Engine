@@ -55,11 +55,11 @@ pub fn render(frame: &RenderFrame, width: usize, height: usize) -> Image {
     let forward = frame.camera.view.inverse().transform_vector3(Vec3::Z);
 
     for mesh in &frame.meshes {
-        draw_mesh(&mut target, frame, view_projection, forward, mesh);
+        draw_mesh(&mut target, frame, view_projection, forward, mesh, frame.selected.contains(&mesh.object));
     }
 
     for sprite in &frame.sprites {
-        draw_sprite(&mut target, view_projection, sprite);
+        draw_sprite(&mut target, view_projection, sprite, frame.selected.contains(&sprite.object));
     }
 
     let mut rgba = Vec::with_capacity(width * height * 4);
@@ -76,7 +76,16 @@ fn is_orthographic(camera: &RenderCamera) -> bool {
     camera.projection.w_axis.w > 0.5
 }
 
-fn draw_mesh(target: &mut Target, frame: &RenderFrame, view_projection: Mat4, forward: Vec3, mesh: &RenderMesh) {
+/// The color of something that is selected: mixed 35% toward orange.
+fn highlight(color: [f32; 4]) -> [f32; 4] {
+    let orange = [1.0, 0.6, 0.1];
+    let mix = |value: f32, target: f32| value * 0.65 + target * 0.35;
+
+    [mix(color[0], orange[0]), mix(color[1], orange[1]), mix(color[2], orange[2]), color[3]]
+}
+
+fn draw_mesh(target: &mut Target, frame: &RenderFrame, view_projection: Mat4, forward: Vec3, mesh: &RenderMesh, selected: bool) {
+    let base_color = if selected { highlight(mesh.color) } else { mesh.color };
     let shape = primitive(mesh.mesh);
     let normal_matrix = Mat3::from_mat4(mesh.model);
 
@@ -113,17 +122,18 @@ fn draw_mesh(target: &mut Target, frame: &RenderFrame, view_projection: Mat4, fo
 
         draw_triangle(target, triangle, mode, &mut |fragment| {
             if mesh.unlit {
-                return Some([mesh.color[0], mesh.color[1], mesh.color[2], 1.0]);
+                return Some([base_color[0], base_color[1], base_color[2], 1.0]);
             }
 
-            let color = lit_color(mesh.color, fragment.world, fragment.normal.normalize_or_zero(), &frame.lights);
+            let color = lit_color(base_color, fragment.world, fragment.normal.normalize_or_zero(), &frame.lights);
 
             Some([color[0], color[1], color[2], 1.0])
         });
     }
 }
 
-fn draw_sprite(target: &mut Target, view_projection: Mat4, sprite: &RenderSprite) {
+fn draw_sprite(target: &mut Target, view_projection: Mat4, sprite: &RenderSprite, selected: bool) {
+    let color = if selected { highlight(sprite.color) } else { sprite.color };
     let corners = [Vec3::new(-0.5, -0.5, 0.0), Vec3::new(0.5, -0.5, 0.0), Vec3::new(0.5, 0.5, 0.0), Vec3::new(-0.5, 0.5, 0.0)];
     let vertices: Vec<ClipVertex> = corners
         .iter()
@@ -138,7 +148,7 @@ fn draw_sprite(target: &mut Target, view_projection: Mat4, sprite: &RenderSprite
     for triangle in [[0, 1, 2], [0, 2, 3]] {
         let corners = [vertices[triangle[0]], vertices[triangle[1]], vertices[triangle[2]]];
 
-        draw_triangle(target, corners, mode, &mut |_| Some(sprite.color));
+        draw_triangle(target, corners, mode, &mut |_| Some(color));
     }
 }
 
@@ -187,7 +197,7 @@ mod tests {
     }
 
     fn frame(camera: RenderCamera, meshes: Vec<RenderMesh>, lights: Vec<RenderLight>) -> RenderFrame {
-        RenderFrame { camera, meshes, sprites: Vec::new(), lights }
+        RenderFrame { camera, meshes, sprites: Vec::new(), lights, selected: Vec::new() }
     }
 
     fn near(actual: [u8; 4], expected: [u8; 3]) -> bool {
@@ -327,5 +337,18 @@ mod tests {
         let picture = frame(camera(), vec![cube], vec![]);
 
         assert_eq!(SoftwareRenderer.render(&picture, 16, 16), render(&picture, 16, 16));
+    }
+
+    #[test]
+    fn a_selected_object_is_drawn_mixed_toward_orange() {
+        let cube = mesh_at(PrimitiveMesh::Cube, Vec3::ZERO, [1.0, 1.0, 1.0, 1.0], true);
+        let mut picture = frame(camera(), vec![cube.clone()], vec![]);
+
+        assert_eq!(render(&picture, 32, 32).pixel(16, 16), [255, 255, 255, 255]);
+
+        picture.selected = vec![cube.object];
+
+        // white * 0.65 + orange (1.0, 0.6, 0.1) * 0.35
+        assert!(near(render(&picture, 32, 32).pixel(16, 16), [255, 219, 175]));
     }
 }

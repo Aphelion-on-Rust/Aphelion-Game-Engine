@@ -1,6 +1,7 @@
 //! From a scene to a list of things to draw.
 //!
 //! - interface.rs  the draw list (`RenderFrame`) and its items
+//! - orbit.rs      the editor's orbit camera (yaw, pitch, distance around a target)
 //! - transform.rs  local and world matrices of objects
 //! - extract.rs    choosing the camera and collecting meshes, sprites and lights
 //!
@@ -9,8 +10,10 @@
 
 pub mod extract;
 pub mod interface;
+pub mod orbit;
 pub mod transform;
 
 pub use extract::{camera_from_world, collect, fallback_camera, find_game_camera, projection_matrix};
+pub use orbit::OrbitCamera;
 pub use interface::{RenderCamera, RenderFrame, RenderLight, RenderMesh, RenderSprite};
 pub use transform::{local_matrix, world_matrix};

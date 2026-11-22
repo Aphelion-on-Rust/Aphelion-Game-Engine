@@ -2,6 +2,7 @@ use crate::hierarchy::{HierarchyController, HierarchyUiModel};
 use crate::history::HistoryModel;
 use crate::keybinds::KeybindModel;
 use crate::prefab_library::PrefabLibraryModel;
+use crate::scene_view::SceneCameraModel;
 use crate::layout::LayoutModel;
 use crate::number_field::NumberFieldModel;
 use crate::theme::ThemeModel;
@@ -40,6 +41,8 @@ pub struct EditorModels {
     pub history: HistoryModel,
     /// The prefab files of the open project.
     pub library: PrefabLibraryModel,
+    /// The camera of the Scene view.
+    pub scene_camera: SceneCameraModel,
     /// Aphelion's Control: prefab histories (empty if the project has none).
     pub control: ControlModel,
     /// The fields of every script, for the Inspector.
@@ -179,6 +182,7 @@ impl EditorModels {
             hierarchy_ui,
             history: HistoryModel::default(),
             library: PrefabLibraryModel::default(),
+            scene_camera: SceneCameraModel::default(),
             control: ControlModel::default(),
             schemas,
             number_field: NumberFieldModel::default(),
@@ -202,6 +206,7 @@ impl EditorModels {
             hierarchy_ui: HierarchyUiModel::default(),
             history: HistoryModel::default(),
             library: opened.library,
+            scene_camera: SceneCameraModel::default(),
             control: opened.control,
             schemas: opened.schemas,
             number_field: NumberFieldModel::default(),

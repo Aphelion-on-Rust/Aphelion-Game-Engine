@@ -6,6 +6,7 @@
 //! - number_field slide-to-change numbers (<-> cursor, hidden pointer while dragging)
 //! - hierarchy    the object tree: rows, selection, drag to reparent
 //! - history      undo / redo of scene edits
+//! - scene_view   the Scene view's orbit camera (orbit, pan, zoom, focus)
 //! - project_io   opening a project folder, loading and saving its scene and id registry
 //!
 //! Every folder uses the same MIVC files: interface, model, controller, (view, query).
@@ -16,6 +17,7 @@ pub mod keybinds;
 pub mod layout;
 pub mod number_field;
 pub mod prefab_library;
+pub mod scene_view;
 pub mod project_io;
 pub mod theme;
 pub mod ui;

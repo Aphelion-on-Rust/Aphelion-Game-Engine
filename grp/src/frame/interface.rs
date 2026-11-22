@@ -63,4 +63,6 @@ pub struct RenderFrame {
     /// Sorted: the sprite with the lowest order first, so later ones are drawn on top.
     pub sprites: Vec<RenderSprite>,
     pub lights: Vec<RenderLight>,
+    /// Objects to draw highlighted (the editor puts the selection here).
+    pub selected: Vec<AssetUuid>,
 }

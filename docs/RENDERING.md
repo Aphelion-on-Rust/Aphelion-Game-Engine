@@ -6,8 +6,9 @@ The renderer is built in steps. Step 7a is everything that happens **before** a 
 | ---- | --------------------------------------------------------------------------------- |
 | 7a   | Rendering components, ready-made objects, the maths that turns a scene into a draw list (done) |
 | 7b   | A software renderer (runs on the CPU, no GPU needed) and the real Scene / Game views (done) |
-| 7c   | The editor camera (orbit, pan, zoom), picking and selection, 2D sprites, materials |
-| 7d   | A GPU backend that draws the same draw list                                       |
+| 7c   | The editor camera (orbit, pan, zoom), picking and selection (done)                |
+| 7d   | Sprite images, textures and materials                                             |
+| 7e   | A GPU backend that draws the same draw list                                       |
 
 The software renderer comes first on purpose: it works on every computer, its output can be checked
 exactly in tests, and the GPU backend can later be compared against it.
@@ -52,11 +53,28 @@ It implements the `RenderBackend` trait, which the GPU renderer (7d) will implem
 
 ### In the editor
 
+The **Scene** view has its own camera that circles a point: **right-drag** orbits, **middle-drag** pans,
+the **wheel** zooms, **F** focuses on the selected object. **Click** an object to select it (Ctrl+click adds to the
+selection, a click on nothing clears it). Selected objects are drawn mixed 35% toward orange.
+
 The **Game** view draws the scene from its camera (the ViewCamera with the highest priority, and a note if
 there is none). The **Scene** view uses a built-in camera for now, orbit / pan / zoom come in 7c.
 The picture is drawn again only when the scene or the panel size changes, and never wider than 640 pixels
 (it is stretched). Drawing on the CPU is slow in a debug build: use `cargo run --release -p flux-editor`.
 The demo scene has a ground, a crate and a ball so there is something to see.
+
+## Picking (`grp/src/pick.rs`)
+
+`pick(frame, ndc_x, ndc_y)` returns the nearest mesh or sprite under a point of the picture. `ndc_x` and `ndc_y` go
+from -1 to 1 with y up. It sends a ray through the point (it works for perspective and orthographic cameras), moves
+the ray into each object's own space and tests the triangles of its shape (both sides count). A sprite is hit
+inside its rectangle. Something behind the camera is never hit.
+
+## The orbit camera (`grp/src/frame/orbit.rs`)
+
+`OrbitCamera` is a target point plus yaw, pitch (positive = looking down) and a distance. Dragging right turns the
+scene right and dragging down looks more down. The pitch stays between -89 and 89 degrees and the distance between
+0.5 and 500. The editor keeps it in the `scene_view` model.
 
 ## From scene to draw list (`grp/src/frame`)
 

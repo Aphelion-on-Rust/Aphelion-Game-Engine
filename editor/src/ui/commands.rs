@@ -8,12 +8,16 @@ use crate::history::HistoryController;
 use crate::keybinds::actions;
 use crate::layout::{DropZone, LayoutController, PanelKind};
 use crate::number_field::{DragPhase, DragSpeed, NumberFieldConfig, NumberFieldController};
+use crate::scene_view::query::render_camera;
+use crate::scene_view::SceneCameraController;
 use crate::theme::ThemeController;
 use flux_engine::error::{EngineError, EngineResult};
 use flux_engine::identity::{AssetUuid, ComponentId};
 use flux_engine::inspect::{FieldPath, FieldValue, InspectController};
 use flux_engine::mivc::Model;
 use flux_engine::scene::{ComponentData, ObjectPreset, SceneController};
+use flux_grp::frame::{collect, world_matrix};
+use flux_grp::pick::pick;
 
 #[derive(Clone, Debug)]
 pub enum UiCommand {
@@ -26,6 +30,18 @@ pub enum UiCommand {
     ResetLayout,
     // theme
     SetTheme(String),
+    // the Scene view
+    /// Drag with the right mouse button (pixels).
+    SceneViewOrbit { dx: f32, dy: f32 },
+    /// Drag with the middle mouse button (pixels).
+    SceneViewPan { dx: f32, dy: f32 },
+    /// The mouse wheel. Up zooms in.
+    SceneViewZoom(f32),
+    /// Look at the selected object (F).
+    SceneViewFocus,
+    SceneViewReset,
+    /// A click in the Scene view. `ndc_x` and `ndc_y` go from -1 to 1, y up. `aspect` is width / height.
+    PickAt { ndc_x: f32, ndc_y: f32, aspect: f32, additive: bool },
     // project
     SaveScene,
     // prefabs (they need the disk, so the app does the work, see IoRequest)
@@ -176,6 +192,7 @@ pub fn apply_all(commands: Vec<UiCommand>, models: &mut EditorModels, state: &mu
 pub fn action_to_command(action: &str, models: &EditorModels) -> Option<UiCommand> {
     match action {
         actions::SAVE => Some(UiCommand::SaveScene),
+        actions::FOCUS_SELECTED => Some(UiCommand::SceneViewFocus),
         actions::RENAME => models.hierarchy_ui.data().selected.first().copied().map(UiCommand::BeginRename),
         actions::UNDO => Some(UiCommand::Undo),
         actions::REDO => Some(UiCommand::Redo),
@@ -276,6 +293,42 @@ fn apply(command: UiCommand, models: &mut EditorModels, state: &mut ControllerSt
         UiCommand::SetTheme(name) => {
             ThemeController.set_active(&mut models.theme, &name)?;
             state.settings_dirty = true;
+        }
+
+        // ----- the Scene view -----
+        UiCommand::SceneViewOrbit { dx, dy } => SceneCameraController.orbit(&mut models.scene_camera, dx, dy),
+        UiCommand::SceneViewPan { dx, dy } => SceneCameraController.pan(&mut models.scene_camera, dx, dy),
+        UiCommand::SceneViewZoom(scroll) => SceneCameraController.zoom(&mut models.scene_camera, scroll),
+        UiCommand::SceneViewReset => SceneCameraController.reset(&mut models.scene_camera),
+        UiCommand::SceneViewFocus => {
+            let selected = models.hierarchy_ui.data().selected.first().copied();
+
+            match selected.and_then(|object| world_matrix(&models.scene.data().objects, &object)) {
+                Some(world) => {
+                    let point = world.w_axis.truncate();
+
+                    SceneCameraController.focus(&mut models.scene_camera, [point.x, point.y, point.z], 6.0);
+                }
+                None => state.status = "Select an object first to focus on it.".to_string(),
+            }
+        }
+        UiCommand::PickAt { ndc_x, ndc_y, aspect, additive } => {
+            let frame = collect(models.scene.data(), render_camera(models.scene_camera.data(), aspect));
+
+            match pick(&frame, ndc_x, ndc_y) {
+                Some(object) => {
+                    if additive {
+                        HierarchyController.toggle_select(&mut models.hierarchy_ui, object);
+                    } else {
+                        HierarchyController.select_only(&mut models.hierarchy_ui, object);
+                    }
+
+                    HierarchyController.expand_to_show(&mut models.hierarchy_ui, &models.scene, &object);
+                }
+                // Clicking on nothing clears the selection (Ctrl+click on nothing keeps it).
+                None if !additive => HierarchyController.clear_selection(&mut models.hierarchy_ui),
+                None => {}
+            }
         }
 
         // ----- project -----
@@ -909,5 +962,89 @@ mod tests {
         apply_all(vec![UiCommand::AddComponent { object: camera, kind: "Nonsense".to_string() }], &mut models, &mut state);
         assert_eq!(count(&models), 3);
         assert_ne!(state.status, "Ready");
+    }
+
+    // ----- the Scene view -----
+
+    fn object_named(models: &EditorModels, name: &str) -> AssetUuid {
+        models.scene.data().objects.iter().find(|object| object.name == name).unwrap().uuid
+    }
+
+    #[test]
+    fn the_scene_camera_moves_and_resets() {
+        let mut models = EditorModels::new_demo();
+        let mut state = ControllerState::default();
+        let start = models.scene_camera.data().clone();
+
+        apply_all(
+            vec![
+                UiCommand::SceneViewOrbit { dx: 40.0, dy: 10.0 },
+                UiCommand::SceneViewPan { dx: 20.0, dy: 0.0 },
+                UiCommand::SceneViewZoom(200.0),
+            ],
+            &mut models,
+            &mut state,
+        );
+
+        assert_ne!(models.scene_camera.data(), &start);
+
+        apply_all(vec![UiCommand::SceneViewReset], &mut models, &mut state);
+        assert_eq!(models.scene_camera.data(), &start);
+    }
+
+    #[test]
+    fn focusing_looks_at_the_selected_object_and_asks_for_a_selection_first() {
+        let mut models = EditorModels::new_demo();
+        let mut state = ControllerState::default();
+
+        apply_all(vec![UiCommand::SceneViewFocus], &mut models, &mut state);
+        assert_ne!(state.status, "Ready");
+
+        let crate_object = object_named(&models, "Crate");
+
+        crate::hierarchy::HierarchyController.select_only(&mut models.hierarchy_ui, crate_object);
+        apply_all(vec![UiCommand::SceneViewFocus], &mut models, &mut state);
+
+        let target = &models.scene_camera.data().target;
+
+        assert!((target.x + 2.0).abs() < 1e-4 && (target.y - 0.5).abs() < 1e-4 && target.z.abs() < 1e-4);
+        assert_eq!(models.scene_camera.data().distance, 6.0);
+    }
+
+    #[test]
+    fn clicking_an_object_in_the_scene_view_selects_it_and_clicking_nothing_clears_the_selection() {
+        let mut models = EditorModels::new_demo();
+        let mut state = ControllerState::default();
+        let aspect = 1.5;
+        let crate_object = object_named(&models, "Crate");
+        let ball = object_named(&models, "Ball");
+
+        // Where the crate (at -2, 0.5, 0) appears in the picture.
+        let camera = render_camera(models.scene_camera.data(), aspect);
+        let spot = |x: f32, y: f32, z: f32| {
+            let ndc = (camera.projection * camera.view).project_point3(flux_grp::glam::Vec3::new(x, y, z));
+
+            (ndc.x, ndc.y)
+        };
+        let (crate_x, crate_y) = spot(-2.0, 0.5, 0.0);
+        let (ball_x, ball_y) = spot(2.0, 0.5, 0.0);
+
+        apply_all(vec![UiCommand::PickAt { ndc_x: crate_x, ndc_y: crate_y, aspect, additive: false }], &mut models, &mut state);
+        assert_eq!(models.hierarchy_ui.data().selected, vec![crate_object]);
+
+        // Ctrl+click on the ball adds it.
+        apply_all(vec![UiCommand::PickAt { ndc_x: ball_x, ndc_y: ball_y, aspect, additive: true }], &mut models, &mut state);
+        assert_eq!(models.hierarchy_ui.data().selected, vec![crate_object, ball]);
+
+        // A click in the sky clears the selection.
+        apply_all(vec![UiCommand::PickAt { ndc_x: 0.0, ndc_y: 0.95, aspect, additive: false }], &mut models, &mut state);
+        assert!(models.hierarchy_ui.data().selected.is_empty());
+    }
+
+    #[test]
+    fn f_is_the_shortcut_for_focus() {
+        let models = EditorModels::new_demo();
+
+        assert!(matches!(action_to_command(actions::FOCUS_SELECTED, &models), Some(UiCommand::SceneViewFocus)));
     }
 }
