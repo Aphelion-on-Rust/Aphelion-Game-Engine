@@ -24,8 +24,9 @@ Heavy steps are done one at a time. Easy steps are grouped. After each step you 
 - [x] 7b Software renderer (meshes, lights, sprites) and the real Scene / Game views
 - [x] 7c Scene view camera (orbit, pan, zoom, focus), picking and selection highlight
 - [x] 7d Textures and sprite images (asset files with fixed uuids). Materials come with the shader steps (12).
+- [x] 8a Physics base: Collider3D shapes, Body3D data, raycasts, collider outlines in the Scene view
 
-About 17 steps and 360 files so far (delivery v0.1.2-alpha).
+About 18 steps and 375 files so far (delivery v0.1.3-alpha).
 
 ## To do (estimates)
 

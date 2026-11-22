@@ -149,7 +149,7 @@ mod tests {
     }
 
     fn frame(camera: RenderCamera, meshes: Vec<RenderMesh>, sprites: Vec<RenderSprite>) -> RenderFrame {
-        RenderFrame { camera, meshes, sprites, lights: Vec::new(), selected: Vec::new(), textures: Default::default() }
+        RenderFrame { camera, meshes, sprites, lights: Vec::new(), selected: Vec::new(), textures: Default::default(), lines: Vec::new() }
     }
 
     #[test]

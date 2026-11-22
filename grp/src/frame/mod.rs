@@ -15,5 +15,5 @@ pub mod transform;
 
 pub use extract::{camera_from_world, collect, fallback_camera, find_game_camera, projection_matrix};
 pub use orbit::OrbitCamera;
-pub use interface::{RenderCamera, RenderFrame, RenderLight, RenderMesh, RenderSprite, TextureImage};
+pub use interface::{RenderCamera, RenderFrame, RenderLight, RenderLine, RenderMesh, RenderSprite, TextureImage};
 pub use transform::{local_matrix, world_matrix};

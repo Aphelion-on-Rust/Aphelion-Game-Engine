@@ -2,6 +2,7 @@
 //!
 //! - `frame`     turns a scene into a list of things to draw (`RenderFrame`), plain maths (step 7a)
 //! - `software`  a renderer that draws a `RenderFrame` on the CPU into an image (step 7b)
+//! - `gizmos`    outlines of colliders and the like, as lines
 //! - `pick`      finds the object under a point of the picture (click to select)
 //! - `backend`   the trait every renderer implements, so the GPU renderer (step 7d) can replace it
 //!
@@ -13,5 +14,6 @@ pub use glam;
 
 pub mod backend;
 pub mod frame;
+pub mod gizmos;
 pub mod pick;
 pub mod software;

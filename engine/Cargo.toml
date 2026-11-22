@@ -7,3 +7,4 @@ edition.workspace = true
 flux-core = { path = "../core" }
 serde.workspace = true
 uuid.workspace = true
+glam.workspace = true

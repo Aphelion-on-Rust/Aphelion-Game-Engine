@@ -17,9 +17,11 @@ use eframe::egui;
 use flux_engine::assets::{query as asset_query, AssetLibraryData, TextureFilter};
 use flux_engine::identity::AssetUuid;
 use flux_engine::mivc::Model;
+use flux_engine::physics::extract_colliders;
 use flux_engine::scene::{ComponentData, SceneData};
 use flux_grp::backend::RenderBackend;
 use flux_grp::frame::{collect, fallback_camera, find_game_camera, TextureImage};
+use flux_grp::gizmos::collider_lines;
 use flux_grp::software::SoftwareRenderer;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -94,6 +96,13 @@ pub fn show(ui: &mut egui::Ui, cache: &mut ViewCache, kind: ViewKind, models: &E
 
         if kind == ViewKind::Scene {
             frame.selected = selected.clone();
+
+            // The outline of the colliders of the selected objects: green, or cyan for a trigger.
+            for collider in extract_colliders(scene).iter().filter(|collider| selected.contains(&collider.object)) {
+                let color = if collider.trigger { [0.2, 0.85, 1.0, 1.0] } else { [0.3, 1.0, 0.4, 1.0] };
+
+                frame.lines.extend(collider_lines(collider, color));
+            }
         }
 
         frame.textures = textures;

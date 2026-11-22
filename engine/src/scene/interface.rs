@@ -1,4 +1,4 @@
-use crate::components::{LightData, MeshDrawData, SpriteDrawData, ViewCameraData};
+use crate::components::{Body3DData, Collider3DData, LightData, MeshDrawData, SpriteDrawData, ViewCameraData};
 use crate::identity::{AssetUuid, ComponentId};
 use crate::inspect::FieldEntry;
 use crate::math::{Vec2, Vec3};
@@ -79,12 +79,15 @@ pub enum ComponentData {
     LightSource(LightData),
     MeshDraw(MeshDrawData),
     SpriteDraw(SpriteDrawData),
+    Collider3D(Collider3DData),
+    Body3D(Body3DData),
 }
 
 impl ComponentData {
     /// The components a user can add from the Inspector. A Transform is always there already,
     /// and a script needs a script asset.
-    pub const ADDABLE: &'static [&'static str] = &["ViewCamera", "LightSource", "MeshDraw", "SpriteDraw"];
+    pub const ADDABLE: &'static [&'static str] =
+        &["ViewCamera", "LightSource", "MeshDraw", "SpriteDraw", "Collider3D", "Body3D"];
 
     /// A new component of the named kind with its default values.
     pub fn new_of_kind(kind: &str) -> Option<ComponentData> {
@@ -93,6 +96,8 @@ impl ComponentData {
             "LightSource" => Some(ComponentData::LightSource(LightData::default())),
             "MeshDraw" => Some(ComponentData::MeshDraw(MeshDrawData::default())),
             "SpriteDraw" => Some(ComponentData::SpriteDraw(SpriteDrawData::default())),
+            "Collider3D" => Some(ComponentData::Collider3D(Collider3DData::default())),
+            "Body3D" => Some(ComponentData::Body3D(Body3DData::default())),
             _ => None,
         }
     }
@@ -107,6 +112,8 @@ impl ComponentData {
             ComponentData::LightSource(_) => "LightSource",
             ComponentData::MeshDraw(_) => "MeshDraw",
             ComponentData::SpriteDraw(_) => "SpriteDraw",
+            ComponentData::Collider3D(_) => "Collider3D",
+            ComponentData::Body3D(_) => "Body3D",
         }
     }
 
@@ -119,6 +126,8 @@ impl ComponentData {
             ComponentData::LightSource(data) => *data = LightData::default(),
             ComponentData::MeshDraw(data) => *data = MeshDrawData::default(),
             ComponentData::SpriteDraw(data) => *data = SpriteDrawData::default(),
+            ComponentData::Collider3D(data) => *data = Collider3DData::default(),
+            ComponentData::Body3D(data) => *data = Body3DData::default(),
             ComponentData::Script(_) => {}
         }
     }

@@ -29,6 +29,14 @@ pub struct TextureImage {
     pub nearest: bool,
 }
 
+/// A straight line in the world, drawn on top of everything (outlines of colliders and the like).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RenderLine {
+    pub from: Vec3,
+    pub to: Vec3,
+    pub color: [f32; 4],
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct RenderMesh {
     pub object: AssetUuid,
@@ -85,4 +93,6 @@ pub struct RenderFrame {
     pub selected: Vec<AssetUuid>,
     /// The pictures the meshes and sprites refer to. `collect` leaves it empty, the editor loads them.
     pub textures: HashMap<AssetUuid, Arc<TextureImage>>,
+    /// Lines drawn on top (gizmos). `collect` leaves it empty, the editor adds what it wants to show.
+    pub lines: Vec<RenderLine>,
 }

@@ -11,8 +11,8 @@ pub mod shade;
 pub mod texture;
 
 use crate::backend::RenderBackend;
-use crate::frame::{RenderCamera, RenderFrame, RenderMesh, RenderSprite, TextureImage};
-use glam::{Mat3, Mat4, Vec2, Vec3};
+use crate::frame::{RenderCamera, RenderFrame, RenderLine, RenderMesh, RenderSprite, TextureImage};
+use glam::{Mat3, Mat4, Vec2, Vec3, Vec4};
 use mesh::primitive;
 use raster::{draw_triangle, ClipVertex, DrawMode, Target};
 use shade::lit_color;
@@ -66,6 +66,10 @@ pub fn render(frame: &RenderFrame, width: usize, height: usize) -> Image {
         draw_sprite(&mut target, view_projection, sprite, frame.selected.contains(&sprite.object), texture);
     }
 
+    for line in &frame.lines {
+        draw_line(&mut target, view_projection, line);
+    }
+
     let mut rgba = Vec::with_capacity(width * height * 4);
 
     for pixel in &target.color {
@@ -78,6 +82,49 @@ pub fn render(frame: &RenderFrame, width: usize, height: usize) -> Image {
 /// An orthographic camera looks the same direction everywhere, a perspective one looks at each point.
 fn is_orthographic(camera: &RenderCamera) -> bool {
     camera.projection.w_axis.w > 0.5
+}
+
+/// Draws a line on top of everything (no depth test). The part behind the camera is cut off.
+fn draw_line(target: &mut Target, view_projection: Mat4, line: &RenderLine) {
+    let start = view_projection * line.from.extend(1.0);
+    let end = view_projection * line.to.extend(1.0);
+
+    // Cut off what is in front of the near plane (clip z < 0).
+    let (start, end): (Vec4, Vec4) = match (start.z >= 0.0, end.z >= 0.0) {
+        (true, true) => (start, end),
+        (false, false) => return,
+        (true, false) => (start, start + (end - start) * (start.z / (start.z - end.z))),
+        (false, true) => (start + (end - start) * (start.z / (start.z - end.z)), end),
+    };
+
+    if start.w <= 1e-9 || end.w <= 1e-9 {
+        return;
+    }
+
+    let to_screen = |clip: Vec4| {
+        let ndc = clip.truncate() / clip.w;
+
+        ((ndc.x * 0.5 + 0.5) * target.width as f32, (1.0 - (ndc.y * 0.5 + 0.5)) * target.height as f32)
+    };
+    let ((x0, y0), (x1, y1)) = (to_screen(start), to_screen(end));
+    let (dx, dy) = (x1 - x0, y1 - y0);
+
+    // A step per pixel along the longer side. Lines that are absurdly long are drawn a bit coarser.
+    let steps = (dx.abs().max(dy.abs()).ceil().max(1.0) as usize).min(20_000);
+
+    for step in 0..=steps {
+        let t = step as f32 / steps as f32;
+        let (x, y) = (x0 + dx * t, y0 + dy * t);
+
+        if x >= 0.0 && y >= 0.0 && (x as usize) < target.width && (y as usize) < target.height {
+            let pixel = &mut target.color[y as usize * target.width + x as usize];
+            let alpha = line.color[3];
+
+            for channel in 0..3 {
+                pixel[channel] = pixel[channel] * (1.0 - alpha) + line.color[channel] * alpha;
+            }
+        }
+    }
 }
 
 /// The color of something that is selected: mixed 35% toward orange.
@@ -235,7 +282,7 @@ mod tests {
     }
 
     fn frame(camera: RenderCamera, meshes: Vec<RenderMesh>, lights: Vec<RenderLight>) -> RenderFrame {
-        RenderFrame { camera, meshes, sprites: Vec::new(), lights, selected: Vec::new(), textures: Default::default() }
+        RenderFrame { camera, meshes, sprites: Vec::new(), lights, selected: Vec::new(), textures: Default::default(), lines: Vec::new() }
     }
 
     fn near(actual: [u8; 4], expected: [u8; 3]) -> bool {
@@ -481,5 +528,27 @@ mod tests {
         // A red color times a blue texture is black.
         picture.meshes = vec![RenderMesh { color: [1.0, 0.0, 0.0, 1.0], ..cube }];
         assert_eq!(render(&picture, 64, 64).pixel(32, 32), [0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn a_line_is_drawn_on_top_across_the_picture_and_the_part_behind_the_camera_is_cut_off() {
+        let line = |from: Vec3, to: Vec3| RenderLine { from, to, color: [1.0, 0.0, 0.0, 1.0] };
+        let mut picture = frame(camera(), vec![], vec![]);
+
+        // Across the middle of the picture.
+        picture.lines = vec![line(Vec3::new(-1.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 0.0))];
+
+        let image = render(&picture, 64, 64);
+
+        assert_eq!(image.pixel(32, 32), [255, 0, 0, 255]);
+        assert_eq!(image.pixel(32, 5), [26, 31, 41, 255]); // somewhere else: the background
+
+        // Entirely behind the camera: nothing.
+        picture.lines = vec![line(Vec3::new(0.0, 0.0, -10.0), Vec3::new(1.0, 0.0, -10.0))];
+        assert_eq!(render(&picture, 64, 64).pixel(32, 32), [26, 31, 41, 255]);
+
+        // From behind the camera to in front of it: the visible part is drawn.
+        picture.lines = vec![line(Vec3::new(0.0, 0.0, -10.0), Vec3::new(0.0, 0.0, 5.0))];
+        assert_eq!(render(&picture, 64, 64).pixel(32, 32), [255, 0, 0, 255]);
     }
 }

@@ -1,4 +1,4 @@
-//! Components that make things appear: a camera, lights, meshes and sprites.
+//! Components that make things appear (a camera, lights, meshes, sprites) and things solid (colliders, bodies).
 //!
 //! They have their own names on purpose: ViewCamera, LightSource, MeshDraw, SpriteDraw.
 //! Their fields are described in `inspect/builtin.rs`, so the Inspector shows them with no extra code.
@@ -29,12 +29,16 @@ macro_rules! named_enum {
     };
 }
 
+pub mod body;
 pub mod camera;
+pub mod collider;
 pub mod light;
 pub mod mesh_draw;
 pub mod sprite_draw;
 
+pub use body::{Body3DData, BodyKind};
 pub use camera::{Projection, ViewCameraData};
+pub use collider::{Collider3DData, ColliderShape};
 pub use light::{LightData, LightKind};
 pub use mesh_draw::{MeshDrawData, PrimitiveMesh};
 pub use sprite_draw::SpriteDrawData;

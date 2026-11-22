@@ -83,7 +83,7 @@ pub fn fallback_camera(aspect: f32) -> RenderCamera {
 /// Inactive objects (and objects inside inactive ones) and parts marked not visible are left out.
 pub fn collect(scene: &SceneData, camera: RenderCamera) -> RenderFrame {
     let objects = &scene.objects;
-    let mut frame = RenderFrame { camera, meshes: Vec::new(), sprites: Vec::new(), lights: Vec::new(), selected: Vec::new(), textures: HashMap::new() };
+    let mut frame = RenderFrame { camera, meshes: Vec::new(), sprites: Vec::new(), lights: Vec::new(), selected: Vec::new(), textures: HashMap::new(), lines: Vec::new() };
 
     for object in objects {
         if !query::is_active_in_hierarchy(objects, &object.uuid) {

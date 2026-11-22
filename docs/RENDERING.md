@@ -74,6 +74,12 @@ Sprites flip with *flip X / flip Y* and use the alpha of the picture.
 
 Materials (shaders, normal maps ...) come with the shader steps. For now the color and the texture are all there is.
 
+## Lines (`RenderFrame.lines`)
+
+A `RenderLine` is a straight line in the world, drawn on top of everything with no depth test (the part behind the
+camera is cut off). `grp/src/gizmos.rs` turns a collider into lines. The editor adds the outlines of the colliders of
+the selected objects to the Scene view (see `docs/PHYSICS.md`).
+
 ## Picking (`grp/src/pick.rs`)
 
 `pick(frame, ndc_x, ndc_y)` returns the nearest mesh or sprite under a point of the picture. `ndc_x` and `ndc_y` go

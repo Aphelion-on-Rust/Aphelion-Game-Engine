@@ -20,6 +20,7 @@ pub mod input;
 pub mod inspect;
 pub mod lifecycle;
 pub mod math;
+pub mod physics;
 pub mod prefab;
 pub mod scene;
 pub mod time;

@@ -7,7 +7,10 @@
 
 use super::interface::{FieldAttribute, FieldDescriptor, FieldKind, FieldValue};
 use crate::identity::AssetUuid;
-use crate::components::{LightData, LightKind, MeshDrawData, PrimitiveMesh, Projection, SpriteDrawData, ViewCameraData};
+use crate::components::{
+    Body3DData, BodyKind, Collider3DData, ColliderShape, LightData, LightKind, MeshDrawData, PrimitiveMesh, Projection,
+    SpriteDrawData, ViewCameraData,
+};
 use crate::math::{Rgba, Vec2, Vec3};
 use crate::scene::{ComponentData, RectTransformData, TransformData};
 use std::sync::OnceLock;
@@ -344,6 +347,71 @@ fn sprite_draw_fields() -> &'static [Field<SpriteDrawData>] {
     })
 }
 
+fn collider_fields() -> &'static [Field<Collider3DData>] {
+    static FIELDS: OnceLock<Vec<Field<Collider3DData>>> = OnceLock::new();
+
+    FIELDS.get_or_init(|| {
+        vec![
+            choice(
+                "shape",
+                ColliderShape::NAMES,
+                vec![],
+                |c: &Collider3DData| c.shape.name(),
+                |c, name| ColliderShape::from_name(name).map(|shape| c.shape = shape).is_some(),
+            ),
+            vec3("center", vec![tooltip("Where the shape is, in the object's own space")], |c: &Collider3DData| c.center, |c, v| c.center = v),
+            vec3("size", vec![min(0.001), show_if("shape", "Box")], |c: &Collider3DData| c.size, |c, v| c.size = v),
+            float(
+                "radius",
+                vec![min(0.001), hide_if("shape", "Box")],
+                |c: &Collider3DData| c.radius,
+                |c, v| c.radius = v,
+            ),
+            float(
+                "height",
+                vec![min(0.001), hide_if("shape", "Box"), hide_if("shape", "Sphere")],
+                |c: &Collider3DData| c.height,
+                |c, v| c.height = v,
+            ),
+            int(
+                "sides",
+                vec![range(3.0, 32.0), show_if("shape", "Prism")],
+                |c: &Collider3DData| c.sides,
+                |c, v| c.sides = v,
+            ),
+            boolean(
+                "trigger",
+                vec![tooltip("Things pass through a trigger and it only sends events")],
+                |c: &Collider3DData| c.trigger,
+                |c, v| c.trigger = v,
+            ),
+            float("friction", vec![range(0.0, 1.0)], |c: &Collider3DData| c.friction, |c, v| c.friction = v),
+            float("bounciness", vec![range(0.0, 1.0)], |c: &Collider3DData| c.bounciness, |c, v| c.bounciness = v),
+        ]
+    })
+}
+
+fn body_fields() -> &'static [Field<Body3DData>] {
+    static FIELDS: OnceLock<Vec<Field<Body3DData>>> = OnceLock::new();
+
+    FIELDS.get_or_init(|| {
+        vec![
+            choice(
+                "kind",
+                BodyKind::NAMES,
+                vec![],
+                |b: &Body3DData| b.kind.name(),
+                |b, name| BodyKind::from_name(name).map(|kind| b.kind = kind).is_some(),
+            ),
+            float("mass", vec![min(0.001), show_if("kind", "Dynamic")], |b: &Body3DData| b.mass, |b, v| b.mass = v),
+            float("gravity_scale", vec![show_if("kind", "Dynamic")], |b: &Body3DData| b.gravity_scale, |b, v| b.gravity_scale = v),
+            float("linear_damping", vec![min(0.0), show_if("kind", "Dynamic")], |b: &Body3DData| b.linear_damping, |b, v| b.linear_damping = v),
+            float("angular_damping", vec![min(0.0), show_if("kind", "Dynamic")], |b: &Body3DData| b.angular_damping, |b, v| b.angular_damping = v),
+            boolean("lock_rotation", vec![show_if("kind", "Dynamic")], |b: &Body3DData| b.lock_rotation, |b, v| b.lock_rotation = v),
+        ]
+    })
+}
+
 // ----- the three functions the rest of the engine uses -----
 
 fn describe_all<T>(fields: &[Field<T>]) -> Vec<FieldDescriptor> {
@@ -369,6 +437,8 @@ pub fn builtin_schema(data: &ComponentData) -> Option<Vec<FieldDescriptor>> {
         ComponentData::LightSource(_) => describe_all(light_fields()),
         ComponentData::MeshDraw(_) => describe_all(mesh_draw_fields()),
         ComponentData::SpriteDraw(_) => describe_all(sprite_draw_fields()),
+        ComponentData::Collider3D(_) => describe_all(collider_fields()),
+        ComponentData::Body3D(_) => describe_all(body_fields()),
         ComponentData::Script(_) => return None,
     })
 }
@@ -382,6 +452,8 @@ pub fn builtin_get(data: &ComponentData, name: &str) -> Option<FieldValue> {
         ComponentData::LightSource(d) => get_from(light_fields(), d, name),
         ComponentData::MeshDraw(d) => get_from(mesh_draw_fields(), d, name),
         ComponentData::SpriteDraw(d) => get_from(sprite_draw_fields(), d, name),
+        ComponentData::Collider3D(d) => get_from(collider_fields(), d, name),
+        ComponentData::Body3D(d) => get_from(body_fields(), d, name),
         ComponentData::Script(_) => None,
     }
 }
@@ -395,6 +467,8 @@ pub fn builtin_set(data: &mut ComponentData, name: &str, value: FieldValue) -> R
         ComponentData::LightSource(d) => set_in(light_fields(), d, name, value),
         ComponentData::MeshDraw(d) => set_in(mesh_draw_fields(), d, name, value),
         ComponentData::SpriteDraw(d) => set_in(sprite_draw_fields(), d, name, value),
+        ComponentData::Collider3D(d) => set_in(collider_fields(), d, name, value),
+        ComponentData::Body3D(d) => set_in(body_fields(), d, name, value),
         ComponentData::Script(_) => Err("a script's fields come from its schema".to_string()),
     }
 }
@@ -412,6 +486,8 @@ mod tests {
             ComponentData::LightSource(LightData::default()),
             ComponentData::MeshDraw(MeshDrawData::default()),
             ComponentData::SpriteDraw(SpriteDrawData::default()),
+            ComponentData::Collider3D(Collider3DData::default()),
+            ComponentData::Body3D(Body3DData::default()),
         ]
     }
 
