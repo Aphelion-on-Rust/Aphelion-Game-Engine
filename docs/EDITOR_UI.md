@@ -8,6 +8,8 @@ Run it with `cargo run -p flux-editor`.
   The highlight shows where it will land. Escape cancels.
 - Drag the dividers between panels. Click the small x on a tab to close it.
 - Window menu: open a closed panel, reset the layout. Theme menu: switch Dark / Light.
+- **Play** (toolbar, Ctrl+P) runs the scene with physics, **Stop** puts it back. While playing, edits, saving and undo
+  are turned off. See `docs/PLAY_MODE.md`.
 - Selecting an object with a Collider3D shows its outline in the Scene view (green, cyan for a trigger).
   See `docs/PHYSICS.md`.
 - Scene view: right-drag orbits the camera, middle-drag pans, the wheel zooms, a click selects the object under
