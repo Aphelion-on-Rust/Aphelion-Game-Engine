@@ -1,7 +1,7 @@
 # Physics
 
-Step 8a is the base: **colliders**, **bodies** (data only for now) and **raycasts**. Moving things (gravity,
-collisions, joints, 2D physics, the character controller) come in the next steps.
+Step 8a is the base: **colliders**, **bodies** and **raycasts**. Step 8b makes bodies **move and collide**.
+Still to come: pressing Play in the editor to see it (8c), 2D physics, joints, the character controller.
 
 ## Components
 
@@ -21,9 +21,37 @@ Shapes stand along the Y axis.
 
 **Body3D** makes an object a physical thing: `kind` (`Dynamic` is moved by forces, `Kinematic` only by code but
 pushes others, `Static` never moves), `mass`, `gravity_scale`, `linear_damping`, `angular_damping`,
-`lock_rotation`. In 8a it only stores these values, the movement comes in 8b.
+`lock_rotation`. The physics world (8b) uses `kind`, `mass`, `gravity_scale` and `linear_damping`.
 
 The Create menu has three ready-made objects: **Physics Cube**, **Physics Sphere** and **Floor**.
+
+## Simulation (`flux_engine::physics::PhysicsWorld`)
+
+`PhysicsWorld::from_scene(scene, settings)` builds a world from the active objects that have a Body3D or a collider.
+An object with a collider but no Body3D is **static**. `world.step(dt)` moves time forward and returns the events.
+
+- **Dynamic** bodies fall with gravity (`settings.gravity`, default 0, -9.81, 0), slow down by their damping, and are pushed
+  out of whatever they hit. A lighter body is pushed more than a heavier one.
+- **Kinematic** bodies move only with the velocity you give them (`set_velocity`). Dynamic bodies can't push through
+  them and are carried by friction. **Static** bodies never move.
+- **Bounce**: the bigger of the two colliders' `bounciness`. Slow touches (under 1 m/s) don't bounce, so things come to rest.
+- **Friction**: the square root of the two colliders' `friction`, never stronger than how hard the two are pressed together.
+- **Triggers** are not solid. When something goes into a trigger or leaves it, you get `TriggerEnter` / `TriggerExit`.
+  Solid bodies that start or stop touching give `CollisionEnter` / `CollisionExit`. At least one of the two must be able to
+  move (or be kinematic) for a trigger to notice it.
+- Time is cut into small steps (`substeps`, default 4) and contacts are fixed several times per step (`iterations`,
+  default 4) so stacks of boxes settle.
+- `positions()` lists where every body that can move is, `raycast()` shoots a ray at the world as it is now,
+  `add_impulse()` gives a sudden push.
+
+How two shapes are tested: each shape can say which of its points is farthest in any direction (`convex.rs`), and
+GJK and EPA (`gjk.rs`) use that to find out if two shapes overlap and the shortest way to push them apart.
+It works the same for all five shapes and every pair of them.
+
+**Limits of 8b:** bodies move but do not turn (they keep their rotation, so `lock_rotation` is always on for now),
+there is no sleeping, no protection against very fast bodies passing through thin things, and every pair of bodies is
+tested (fine for hundreds of bodies, a faster broad phase comes later). The world is not connected to the editor yet,
+that is step 8c.
 
 ## Scale
 
@@ -51,4 +79,6 @@ Select an object with a collider and its outline is drawn in the Scene view: **g
 - `engine/src/components/collider.rs`, `body.rs` the data
 - `engine/src/physics/world.rs` colliders in the world
 - `engine/src/physics/raycast.rs` rays against every shape
+- `engine/src/physics/convex.rs`, `gjk.rs` the collision test for every pair of shapes
+- `engine/src/physics/sim.rs` the physics world
 - `grp/src/gizmos.rs` the outline lines
