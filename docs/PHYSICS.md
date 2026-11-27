@@ -1,7 +1,8 @@
 # Physics
 
 Step 8a is the base: **colliders**, **bodies** and **raycasts**. Step 8b makes bodies **move and collide**.
-Still to come: pressing Play in the editor to see it (8c), 2D physics, joints, the character controller.
+Step 8c connects it to the editor: press Play to see it (`docs/PLAY_MODE.md`).
+Still to come: 2D physics, joints, the character controller.
 
 ## Components
 
@@ -50,8 +51,7 @@ It works the same for all five shapes and every pair of them.
 
 **Limits of 8b:** bodies move but do not turn (they keep their rotation, so `lock_rotation` is always on for now),
 there is no sleeping, no protection against very fast bodies passing through thin things, and every pair of bodies is
-tested (fine for hundreds of bodies, a faster broad phase comes later). The world is not connected to the editor yet,
-that is step 8c.
+tested (fine for hundreds of bodies, a faster broad phase comes later). In the editor the world runs in Play mode (`docs/PLAY_MODE.md`).
 
 ## Scale
 

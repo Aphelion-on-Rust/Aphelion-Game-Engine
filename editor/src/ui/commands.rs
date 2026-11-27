@@ -2,6 +2,8 @@
 //! This is the only place where the UI layer changes models, always through a controller.
 
 use super::field::{with_number, NumberTarget};
+use crate::play::query::in_play_mode;
+use crate::play::PlayRequest;
 use super::models::EditorModels;
 use crate::hierarchy::HierarchyController;
 use crate::history::HistoryController;
@@ -43,6 +45,12 @@ pub enum UiCommand {
     SceneViewReset,
     /// A click in the Scene view. `ndc_x` and `ndc_y` go from -1 to 1, y up. `aspect` is width / height.
     PickAt { ndc_x: f32, ndc_y: f32, aspect: f32, additive: bool },
+    // play mode (the app holds the physics world, see ControllerState::pending_play)
+    /// Play, or Stop if already playing (Ctrl+P).
+    PlayToggle,
+    /// Pause or resume.
+    PlayPause,
+    PlayStop,
     // project
     SaveScene,
     // prefabs (they need the disk, so the app does the work, see IoRequest)
@@ -101,6 +109,24 @@ pub enum UiCommand {
 }
 
 impl UiCommand {
+    /// Commands that change the scene, save it or go through its history. While playing the scene is a temporary
+    /// copy that Stop replaces, so these are refused: the changes would be lost.
+    fn blocked_while_playing(&self) -> bool {
+        self.history_info().is_some()
+            || matches!(
+                self,
+                UiCommand::SaveScene
+                    | UiCommand::Undo
+                    | UiCommand::Redo
+                    | UiCommand::UndoSteps(_)
+                    | UiCommand::RedoSteps(_)
+                    | UiCommand::PlacePrefab { .. }
+                    | UiCommand::ApplyToPrefab
+                    | UiCommand::RevertRevision { .. }
+                    | UiCommand::NumberDragBegin { .. }
+            )
+    }
+
     /// For commands that edit the scene: the name of the undo step, and a merge key
     /// (steps with the same key that follow each other become one step).
     fn history_info(&self) -> Option<(String, Option<String>)> {
@@ -163,6 +189,8 @@ pub struct ControllerState {
     pub save_requested: bool,
     /// Prefab work waiting for the app (it needs the disk).
     pub pending_io: Vec<IoRequest>,
+    /// Play, stop or pause waiting for the app (it holds the physics world).
+    pub pending_play: Vec<PlayRequest>,
 }
 
 impl Default for ControllerState {
@@ -174,6 +202,7 @@ impl Default for ControllerState {
             settings_dirty: false,
             save_requested: false,
             pending_io: Vec::new(),
+            pending_play: Vec::new(),
         }
     }
 }
@@ -181,6 +210,11 @@ impl Default for ControllerState {
 /// Runs the commands in order. An error does not stop the rest, it shows in the status bar.
 pub fn apply_all(commands: Vec<UiCommand>, models: &mut EditorModels, state: &mut ControllerState) {
     for command in commands {
+        if in_play_mode(models.play.data()) && command.blocked_while_playing() {
+            state.status = "Stop playing first: changes made while playing are lost (saving and undo are turned off)".to_string();
+            continue;
+        }
+
         // Commands that edit the scene become an undo step, if they really changed something.
         let edit = command.history_info();
         let before = edit.as_ref().map(|_| models.scene.data().clone());
@@ -202,6 +236,7 @@ pub fn action_to_command(action: &str, models: &EditorModels) -> Option<UiComman
     match action {
         actions::SAVE => Some(UiCommand::SaveScene),
         actions::FOCUS_SELECTED => Some(UiCommand::SceneViewFocus),
+        actions::PLAY => Some(UiCommand::PlayToggle),
         actions::RENAME => models.hierarchy_ui.data().selected.first().copied().map(UiCommand::BeginRename),
         actions::UNDO => Some(UiCommand::Undo),
         actions::REDO => Some(UiCommand::Redo),
@@ -302,6 +337,23 @@ fn apply(command: UiCommand, models: &mut EditorModels, state: &mut ControllerSt
         UiCommand::SetTheme(name) => {
             ThemeController.set_active(&mut models.theme, &name)?;
             state.settings_dirty = true;
+        }
+
+        // ----- play mode -----
+        UiCommand::PlayToggle => {
+            let request = if in_play_mode(models.play.data()) { PlayRequest::Stop } else { PlayRequest::Start };
+
+            state.pending_play.push(request);
+        }
+        UiCommand::PlayPause => {
+            if in_play_mode(models.play.data()) {
+                state.pending_play.push(PlayRequest::TogglePause);
+            }
+        }
+        UiCommand::PlayStop => {
+            if in_play_mode(models.play.data()) {
+                state.pending_play.push(PlayRequest::Stop);
+            }
         }
 
         // ----- the Scene view -----
@@ -588,7 +640,7 @@ mod tests {
 
         assert!(matches!(action_to_command(actions::DELETE, &models), Some(UiCommand::DeleteSelected)));
         assert!(matches!(action_to_command(actions::SAVE, &models), Some(UiCommand::SaveScene)));
-        assert!(action_to_command(actions::PLAY, &models).is_none());
+        assert!(matches!(action_to_command(actions::PLAY, &models), Some(UiCommand::PlayToggle)));
     }
 
     #[test]
@@ -1075,5 +1127,52 @@ mod tests {
             state.pending_io,
             vec![IoRequest::RefreshAssets, IoRequest::SetTextureFilter { asset, filter: TextureFilter::Nearest }]
         );
+    }
+
+    // ----- play mode -----
+
+    #[test]
+    fn play_commands_become_requests_for_the_app() {
+        let mut models = EditorModels::new_demo();
+        let mut state = ControllerState::default();
+
+        // Not playing: Play asks to start, Pause and Stop do nothing.
+        apply_all(vec![UiCommand::PlayToggle, UiCommand::PlayPause, UiCommand::PlayStop], &mut models, &mut state);
+        assert_eq!(state.pending_play, vec![PlayRequest::Start]);
+
+        // Playing: the same button asks to stop, and Pause and Stop work.
+        state.pending_play.clear();
+        crate::play::PlayController.start(&mut models.play, &models.scene);
+        apply_all(vec![UiCommand::PlayToggle, UiCommand::PlayPause, UiCommand::PlayStop], &mut models, &mut state);
+        assert_eq!(state.pending_play, vec![PlayRequest::Stop, PlayRequest::TogglePause, PlayRequest::Stop]);
+    }
+
+    #[test]
+    fn while_playing_edits_saving_and_undo_are_refused_but_looking_around_still_works() {
+        let mut models = EditorModels::new_demo();
+        let mut state = ControllerState::default();
+        let objects = models.scene.data().objects.len();
+        let first = models.scene.data().objects[0].uuid;
+
+        crate::play::PlayController.start(&mut models.play, &models.scene);
+
+        apply_all(
+            vec![UiCommand::CreateObject { parent: None }, UiCommand::DeleteSelected, UiCommand::SaveScene, UiCommand::Undo],
+            &mut models,
+            &mut state,
+        );
+
+        assert_eq!(models.scene.data().objects.len(), objects);
+        assert!(!state.save_requested);
+        assert!(state.status.contains("Stop playing"));
+
+        apply_all(vec![UiCommand::SelectObject { object: first, additive: false }, UiCommand::SceneViewZoom(50.0)], &mut models, &mut state);
+
+        assert_eq!(models.hierarchy_ui.data().selected, vec![first]);
+
+        // After Stop everything works again.
+        crate::play::PlayController.stop(&mut models.play, &mut models.scene);
+        apply_all(vec![UiCommand::CreateObject { parent: None }], &mut models, &mut state);
+        assert_eq!(models.scene.data().objects.len(), objects + 1);
     }
 }

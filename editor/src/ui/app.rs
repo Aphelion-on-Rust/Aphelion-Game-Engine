@@ -2,16 +2,19 @@ use super::commands::{action_to_command, apply_all, ControllerState, UiCommand};
 use super::dock_view::DockView;
 use super::models::EditorModels;
 use super::panels::PanelViews;
-use super::{input_bridge, menu_bar, prefab_flow, theme_apply};
+use super::{input_bridge, menu_bar, prefab_flow, theme_apply, toolbar};
 use crate::keybinds::query::triggered_actions;
 use crate::number_field::query::cursor_icon;
 use crate::number_field::{wrapped_x, CursorIcon, DragPhase, NumberFieldController};
+use crate::play::query::in_play_mode;
+use crate::play::{PlayController, PlayRequest};
 use crate::project_io;
 use crate::theme::query::active_theme;
 use crate::theme::ThemeData;
 use eframe::egui;
 use flux_engine::input::InputController;
 use flux_engine::mivc::{Model, Store};
+use flux_engine::physics::PhysicsWorld;
 use flux_engine::scene::SceneData;
 use flux_engine::storage::SettingsStore;
 use std::path::PathBuf;
@@ -34,6 +37,8 @@ pub struct EditorApp {
     close_prompt: bool,
     /// The question was answered, the window may close now.
     allow_close: bool,
+    /// The physics world while playing. It is not saved data, so it lives here and not in a model.
+    play_world: Option<PhysicsWorld>,
 }
 
 impl EditorApp {
@@ -81,6 +86,7 @@ impl EditorApp {
             last_title: String::new(),
             close_prompt: false,
             allow_close: false,
+            play_world: None,
         }
     }
 
@@ -99,8 +105,11 @@ impl EditorApp {
     }
 
     fn scene_is_dirty(&self) -> bool {
+        // While playing the scene is a temporary copy, so what counts is the scene Stop will bring back.
+        let current = self.models.play.data().snapshot.as_ref().unwrap_or(self.models.scene.data());
+
         match &self.saved_scene {
-            Some(saved) => saved != self.models.scene.data(),
+            Some(saved) => saved != current,
             None => false,
         }
     }
@@ -111,8 +120,9 @@ impl EditorApp {
             None => "no project".to_string(),
         };
         let mark = if self.scene_is_dirty() { " *" } else { "" };
+        let playing = if in_play_mode(self.models.play.data()) { " [playing]" } else { "" };
 
-        format!("{name}{mark} - Flux Aphelion")
+        format!("{name}{mark}{playing} - Flux Aphelion")
     }
 
     /// Writes the scene and the id registry. Both files are written safely (temp file, then rename).
@@ -251,6 +261,7 @@ impl eframe::App for EditorApp {
 
         // 3. Draw. The views only read the models and push commands.
         menu_bar::show(ctx, &self.models, &mut commands);
+        toolbar::show(ctx, &self.models, &mut commands);
 
         let dirty = self.scene_is_dirty();
 
@@ -279,6 +290,31 @@ impl eframe::App for EditorApp {
 
         // 5. Apply the commands through the controllers.
         apply_all(commands, &mut self.models, &mut self.state);
+
+        // 5b. Play mode: start, stop and pause, then move the game forward by the time this frame took.
+        for request in std::mem::take(&mut self.state.pending_play) {
+            match request {
+                PlayRequest::Start if !in_play_mode(self.models.play.data()) => {
+                    self.play_world = Some(PlayController.start(&mut self.models.play, &self.models.scene));
+                    self.state.status = "Playing. Changes you make are lost when you stop.".to_string();
+                }
+                PlayRequest::Stop if in_play_mode(self.models.play.data()) => {
+                    PlayController.stop(&mut self.models.play, &mut self.models.scene);
+                    self.play_world = None;
+                    self.state.status = "Stopped. The scene is back as it was.".to_string();
+                }
+                PlayRequest::TogglePause => PlayController.toggle_pause(&mut self.models.play),
+                _ => {}
+            }
+        }
+
+        if let Some(world) = &mut self.play_world {
+            let dt = ctx.input(|state| state.stable_dt);
+
+            PlayController.advance(&mut self.models.play, &mut self.models.scene, world, dt);
+            // Keep drawing while the game runs, even when nothing else happens.
+            ctx.request_repaint();
+        }
 
         // 6. Saving the scene, prefab work that needs the disk, the cursor, and the window title.
         if self.state.save_requested {

@@ -26,8 +26,9 @@ Heavy steps are done one at a time. Easy steps are grouped. After each step you 
 - [x] 7d Textures and sprite images (asset files with fixed uuids). Materials come with the shader steps (12).
 - [x] 8a Physics base: Collider3D shapes, Body3D data, raycasts, collider outlines in the Scene view
 - [x] 8b Physics world: gravity, collisions, friction, bounce, triggers and events
+- [x] 8c Play mode in the editor: Play, Pause, Stop on a copy of the scene
 
-About 19 steps and 390 files so far (delivery v0.1.4-alpha).
+About 20 steps and 405 files so far (delivery v0.1.5-alpha).
 
 ## To do (estimates)
 
@@ -37,7 +38,7 @@ File counts include tests and docs. Treat every number as +/- 40%.
 | Step | What                                                                 | Deliveries | New files |
 | ---- | -------------------------------------------------------------------- | ---------- | --------- |
 | 7e   | GPU backend that draws the same draw list | 1 | 15 |
-| 8    | Physics rest: Play mode in the editor (8c), 2D physics, joints, character controller, turning bodies, wheels, mesh and terrain colliders | 3 | 55 |
+| 8    | Physics rest: 2D physics, joints, character controller, turning bodies, wheels, mesh and terrain colliders | 2 | 40 |
 | 9    | C# scripting host: load assemblies, bind the engine API, serialized fields | 3     | 45        |
 | 10   | Asset pipeline: FBX / humanoid, atlas (convert, trim), audio, importers | 3       | 50        |
 | 11   | Animation: timeline, visual-graph animator, bone rigs, IK            | 4          | 60        |
@@ -47,9 +48,9 @@ File counts include tests and docs. Treat every number as +/- 40%.
 | 15   | Camera system (Cinemachine-like), mesh editing tool (ProBuilder-like) | 2         | 35        |
 | 16   | Input system UI, extensions, Windows build template                  | 3          | 45        |
 | 17   | Documentation pass                                                   | 2          | 25        |
-|      | **Total**                                                            | **about 31** | **about 420** |
+|      | **Total**                                                            | **about 30** | **about 405** |
 
-So roughly 31 more steps and 400 to 460 more files, about 790 files in the end.
+So roughly 30 more steps and 385 to 445 more files, about 790 files in the end.
 
 ## Where it can grow
 
